@@ -64,7 +64,8 @@ def test_unsigned_verdict_cannot_install(store):
 
 
 def test_loopback_csrf_origin_and_settings_survive_restart(store):
-    with TestClient(create_app(store,daemon=False)) as c:
+    with TestClient(create_app(store,daemon=False),base_url="http://127.0.0.1") as c:
+        assert c.get('/api/session',headers={'Host':'testserver'}).status_code==403
         assert c.get('/api/state').status_code==401
         csrf=c.get('/api/session').json()['csrf']
         assert c.post('/api/settings',json={'locale':'en'}).status_code==403
@@ -76,8 +77,29 @@ def test_loopback_csrf_origin_and_settings_survive_restart(store):
     assert Store(store.root).settings()['timezone']=='UTC'
 
 
+def test_late_terminal_preserves_triage_status(store):
+    spool(store,event(store));ingest(store);process_one(store)
+    late=event(store);late['hook_event_name']='SessionEnd'
+    spool(store,late);ingest(store)
+    assert store.list('runs')[0]['status']=='triaged'
+    assert state(store)['metrics']['reviewed_runs']==0
+
+
 def test_secret_and_raw_prompt_not_persisted(store):
     e=event(store,api_key='sk-secretvalue1234567',prompt='private prompt',tool_input={'command':'curl --header secret'})
     spool(store,e)
     data=next((store.root/'spool').glob('*.json')).read_text()
     assert 'secretvalue' not in data and 'private prompt' not in data and 'curl' not in data
+
+
+def test_browser_retry_cannot_replay_consumed_model_attempt(store):
+    spool(store,event(store));ingest(store);job=store.lease()
+    with store.connect() as db:
+        db.execute("UPDATE jobs SET status='hold',reason_code='INVALID_JSON' WHERE id=?",(job['id'],))
+    store.put('review_attempts',{'id':'actual-model-attempt','run_id':job['run_id'],
+                              'status':'prepared','admission_sha256':'a'*64})
+    with TestClient(create_app(store,daemon=False),base_url="http://127.0.0.1") as c:
+        csrf=c.get('/api/session').json()['csrf']
+        r=c.post('/api/jobs/'+job['id']+'/retry',headers={'x-csrf-token':csrf})
+        assert r.status_code==409 and r.json()['detail']['reason_code']=='ATTEMPT_READBACK_REQUIRED'
+    assert store.jobs()[0]['status']=='hold'

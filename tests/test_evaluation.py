@@ -5,6 +5,7 @@ import subprocess
 import os
 import pytest
 from skill_observatory.evaluation import DockerSandbox, Environment, EvaluationHold, FixedArtifactOracle, Case, freeze_protocol, paired_evaluate
+from skill_observatory.store import Store
 
 PINNED_IMAGE='python@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f'
 
@@ -61,3 +62,21 @@ def test_real_artifact_grading_and_synthetic_final_stays_hold(image):
     receipts=[x['receipt']['container_id'] for x in r['trials']]
     assert len(set(receipts))==2
     with pytest.raises(EvaluationHold,match='ARM_HASH_DRIFT'):paired_evaluate(p,parent,{'task.py':b'changed'},cases,oracle,'task.py')
+
+
+def test_final_set_consumption_survives_restart_and_new_protocol(image,tmp_path):
+    store=Store(tmp_path/'private')
+    parent={'task.py':b"from pathlib import Path; Path('/out/result').write_text('wrong')"}
+    candidate={'task.py':b"from pathlib import Path; Path('/out/result').write_text('right')"}
+    cases=[Case('infra-fixture',{},'synthetic','final','a'*64)]
+    oracle=FixedArtifactOracle({'infra-fixture':{'result':b'right'}})
+    p=freeze_protocol(parent,candidate,cases,oracle,Environment(image),'deterministic-python','not-applicable-no-model')
+    result=paired_evaluate(p,parent,candidate,cases,oracle,'task.py',store)
+    assert result['status']=='hold'
+    assert store.list('evaluation_attempts')[0]['result_sha256']
+    assert store.list('final_sets')[0]['status']=='consumed'
+    p2=freeze_protocol(parent,candidate,cases,oracle,Environment(image),'deterministic-python','not-applicable-no-model')
+    assert p2['id']!=p['id']
+    with pytest.raises(EvaluationHold,match='FINAL_SET_ALREADY_CONSUMED'):
+        paired_evaluate(p2,parent,candidate,cases,oracle,'task.py',Store(store.root))
+    assert len(store.list('evaluation_attempts'))==1

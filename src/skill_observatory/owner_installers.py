@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 import subprocess
-from .installations import validate_verdict
+from .installations import validate_verdict,authority_expired
 from .store import canonical,digest,now
 
 class SkillEvolutionInstaller:
@@ -21,7 +21,7 @@ class SkillEvolutionInstaller:
         if not c:raise ValueError('CANDIDATE_NOT_FOUND')
         verdict=validate_verdict(store,store.get('verdicts',c['verdict_id']) or {})
         authority=store.get('authority_grants',c['authority_id'])
-        if not authority or authority.get('status')!='authorized' or authority.get('owner')!=self.owner or authority.get('target')!=c['target'] or authority.get('surface')!='single_text_file' or (authority.get('expires_at') and authority['expires_at']<now()):raise ValueError('OWNER_AUTHORITY_HOLD')
+        if not authority or authority.get('status')!='authorized' or authority.get('owner')!=self.owner or authority.get('target')!=c['target'] or authority.get('surface')!='single_text_file' or authority_expired(authority.get('expires_at')):raise ValueError('OWNER_AUTHORITY_HOLD')
         store.read_artifact(authority['evidence_sha256'])
         target=Path(c['target'])
         existing=store.get('installations','owner_inst_'+candidate_id)
@@ -41,7 +41,12 @@ class SkillEvolutionInstaller:
         store.put('installations',item);return item
     def rollback(self,store,installation):
         target=Path(installation['target'])
-        if target.is_symlink() or digest(target.read_bytes())!=installation['after_sha256']:raise ValueError('DRIFT_HOLD')
+        allowed={installation['after_sha256']}
+        if installation['status']=='owner_rollback_prepared':allowed.add(installation['before_sha256'])
+        if target.is_symlink() or digest(target.read_bytes()) not in allowed:raise ValueError('DRIFT_HOLD')
+        installation.update(status='owner_rollback_prepared',updated_at=now())
+        store.put('installations',installation)
         result=self.call('rollback',installation['owner_incident_id'])
         if digest(target.read_bytes())!=installation['before_sha256']:raise ValueError('OWNER_READBACK_FAILED')
-        installation.update(status='rolled_back',updated_at=now());store.put('installations',installation);return installation
+        installation.update(status='rolled_back',updated_at=now(),rollback_receipt_artifact=store.artifact(canonical(result)))
+        store.put('installations',installation);return installation

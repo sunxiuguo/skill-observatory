@@ -22,7 +22,7 @@ class CodexReviewer:
         self.provider=provider;self.effort=effort;self.cwd=str(Path(cwd).resolve());self.max_seconds=max_seconds
         self.daily_attempt_limit=daily_attempt_limit
     def review(self,store,run):
-        attempts=[x for x in store.list('review_attempts') if x.get('created_at','').startswith(now()[:10])]
+        attempts=[x for x in store.list('review_attempts') if x.get('admission_sha256') and x.get('created_at','').startswith(now()[:10])]
         if len(attempts)>=self.daily_attempt_limit:raise ValueError('DAILY_REVIEW_ATTEMPT_BUDGET_HOLD')
         admitted=self.admission(self.model,self.provider,self.effort)
         if admitted.get('ok') is not True:raise ValueError(admitted.get('reason_code','MODEL_ADMISSION_HOLD'))
@@ -69,6 +69,11 @@ class CodexReviewer:
         if not texts:raise ValueError('REVIEW_OUTPUT_MISSING')
         output_sha=store.artifact(canonical(redact(texts)))
         store.put('review_outputs',{'id':'output_'+run['id'],'artifact_sha256':output_sha,'created_at':now()})
+        # Preserve actual model consumption even if schema/binding validation
+        # fails next. Output recovery must not invoke the model a second time.
+        attempt.update(thread_id=tid,usage=usage,wall_seconds=time.monotonic()-start,
+                       output_sha256=output_sha,status='output_received')
+        store.put('review_attempts',attempt)
         raw=texts[-1].strip()
         if raw.startswith('```json\n'):
             blocks=re.findall(r'```json\s*\n(.*?)\n```',raw,re.S)
@@ -77,5 +82,5 @@ class CodexReviewer:
         receipt=json.loads(raw)
         if receipt['review_id']!='rv_'+run['id'] or receipt['run_id']!=run['id'] or receipt['evidence_manifest_sha256']!=evidence:raise ValueError('REVIEW_BINDING_MISMATCH')
         result=accept_review(store,receipt,version)
-        store.put('review_attempts',{**attempt,'thread_id':tid,'usage':usage,'wall_seconds':time.monotonic()-start,'status':'completed'})
+        store.put('review_attempts',{**attempt,'status':'completed'})
         return result

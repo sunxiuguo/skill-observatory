@@ -108,16 +108,19 @@ class FixedArtifactOracle:
         return bool(receipt.get('exit_code')==0 and artifacts==expected)
 
 
-def freeze_protocol(parent, candidate, cases, oracle, environment, model, max_verified_effort, budget_seconds=300, min_gain=0., alpha=.05, minimum_cases=1):
+def freeze_protocol(parent, candidate, cases, oracle, environment, model, max_verified_effort, budget_seconds=300, min_gain=0., alpha=.05, minimum_cases=1, cost_limits=None):
     environment.validate()
     if not model or not max_verified_effort:raise EvaluationHold('EXACT_MODEL_EFFORT_REQUIRED')
-    if not 0<alpha<1 or not 0<=min_gain<1 or budget_seconds<=0:raise EvaluationHold('INVALID_PROTOCOL')
+    if not 0<alpha<1 or not 0<=min_gain<1 or not math.isfinite(budget_seconds) or budget_seconds<=0 or type(minimum_cases) is not int or minimum_cases<1:raise EvaluationHold('INVALID_PROTOCOL')
     if len(set(c.id for c in cases))!=len(cases):raise EvaluationHold('CASE_ID_COLLISION')
+    if cost_limits is not None:
+        if set(cost_limits)!={'money','tokens','wall_seconds'} or any(type(v) not in {int,float} or not math.isfinite(v) or v<0 for v in cost_limits.values()):raise EvaluationHold('INVALID_COST_POLICY')
     return {'id':'proto_'+secrets.token_hex(12),'parent_sha256':digest(canonical({k:digest(v) for k,v in parent.items()})),
       'candidate_sha256':digest(canonical({k:digest(v) for k,v in candidate.items()})),
+      'arm_files':{'parent':{k:digest(v) for k,v in parent.items()},'candidate':{k:digest(v) for k,v in candidate.items()}},
       'oracle_sha256':oracle.sha256,'environment':environment.__dict__,'model':model,'max_verified_effort':max_verified_effort,
       'cases':[{'id':c.id,'source':c.source,'split':c.split,'evidence_sha256':c.evidence_sha256,'inputs_sha256':digest(canonical({k:digest(v) for k,v in c.input_files.items()}))} for c in cases],
-      'budget_seconds':budget_seconds,'min_gain':min_gain,'alpha':alpha,'minimum_cases':minimum_cases,'final_exposed':False,'max_attempts':1,'created_at':now()}
+      'budget_seconds':budget_seconds,'cost_limits':cost_limits,'min_gain':min_gain,'alpha':alpha,'minimum_cases':minimum_cases,'final_exposed':False,'max_attempts':1,'created_at':now()}
 
 
 def paired_evaluate(protocol,parent,candidate,cases,oracle,entrypoint,store=None):
@@ -128,6 +131,22 @@ def paired_evaluate(protocol,parent,candidate,cases,oracle,entrypoint,store=None
     if oracle.sha256!=protocol['oracle_sha256']:raise EvaluationHold('ORACLE_DRIFT')
     actual=[{'id':c.id,'source':c.source,'split':c.split,'evidence_sha256':c.evidence_sha256,'inputs_sha256':digest(canonical({k:digest(v) for k,v in c.input_files.items()}))} for c in cases]
     if actual!=protocol['cases']:raise EvaluationHold('CASE_DRIFT')
+    # Final feedback is consumed once across protocol IDs/candidates. Creating
+    # another protocol must not turn a reused selection set into fresh truth.
+    final_key='final_'+digest(canonical({'oracle':oracle.sha256,'cases':sorted(
+        (c['id'],c['evidence_sha256'],c['inputs_sha256'])
+        for c in actual if c['split']=='final')}))
+    attempt_id='final_attempt_'+secrets.token_hex(12)
+    if store:
+        with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            existing=store.get('protocols',protocol['id'],db)
+            if existing and digest(canonical(existing))!=frozen:raise EvaluationHold('PROTOCOL_DRIFT')
+            if store.get('final_sets',final_key,db):raise EvaluationHold('FINAL_SET_ALREADY_CONSUMED')
+            store.put('protocols',protocol,db)
+            store.put('final_sets',{'id':final_key,'attempt_id':attempt_id,'protocol_sha256':frozen,'status':'consumed','created_at':now()},db)
+            store.put('evaluation_attempts',{'id':attempt_id,'protocol_id':protocol['id'],'protocol_sha256':frozen,'status':'prepared','created_at':now(),'money':None,'tokens':None},db)
+    else:missing.append('DURABLE_ATTEMPT_LEDGER_REQUIRED')
     for case in cases:
         if case.split!='final':continue
         order=['parent','candidate'];secrets.SystemRandom().shuffle(order)
@@ -156,4 +175,9 @@ def paired_evaluate(protocol,parent,candidate,cases,oracle,entrypoint,store=None
     if lower is None or lower<=protocol['min_gain']:missing.append('NO_CONFIRMED_GAIN')
     # Domain guardrail and cost truth are mandatory, not inferred from artifact matches.
     missing+=['DOMAIN_GUARDRAIL_RECEIPT_REQUIRED','COST_COVERAGE_REQUIRED']
-    return {'id':'eval_'+secrets.token_hex(12),'protocol_id':protocol['id'],'protocol_sha256':frozen,'status':'hold','reason_code':missing[0] if missing else 'FINAL_GATE_HOLD','missing':sorted(set(missing)),'trials':trials,'paired_cases':n,'paired_gain':mean,'paired_gain_lower_bound':lower,'confidence':1-protocol['alpha'],'method':'Hoeffding paired bound on independent task differences [-1,1]','wall_seconds':time.monotonic()-start,'created_at':now()}
+    if protocol['model']!='deterministic-python':missing.append('MODEL_EXECUTION_RECEIPT_REQUIRED')
+    result={'id':'eval_'+secrets.token_hex(12),'protocol_id':protocol['id'],'protocol_sha256':frozen,'attempt_id':attempt_id,'status':'hold','reason_code':missing[0] if missing else 'FINAL_GATE_HOLD','missing':sorted(set(missing)),'trials':trials,'paired_cases':n,'paired_gain':mean,'paired_gain_lower_bound':lower,'confidence':1-protocol['alpha'],'method':'Hoeffding paired bound on independent task differences [-1,1]','wall_seconds':time.monotonic()-start,'created_at':now()}
+    if store:
+        evidence=store.artifact(canonical(result));store.put('evaluations',result)
+        store.put('evaluation_attempts',{'id':attempt_id,'protocol_id':protocol['id'],'protocol_sha256':frozen,'status':'completed_hold','result_sha256':evidence,'wall_seconds':result['wall_seconds'],'money':None,'tokens':None,'created_at':now()})
+    return result

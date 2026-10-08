@@ -10,13 +10,15 @@ from .store import Store, atomic_write, canonical, digest, now
 EVENTS = {"SessionStart","UserPromptSubmit","PreToolUse","PostToolUse","Stop","SessionEnd","SubagentStart","SubagentStop","Interrupt"}
 TERMINAL = {"Stop","SessionEnd","SubagentStop","Interrupt"}
 ORIGINS = {"user_run","review","candidate_dev","final_eval","activation_canary","maintenance"}
-SENSITIVE = re.compile(r"(?i)(api[_-]?key|authorization|password|secret|access[_-]?token|refresh[_-]?token)")
+SENSITIVE = re.compile(r"(?i)(api[_-]?key|private[_-]?key|credential|authorization|password|secret|access[_-]?token|refresh[_-]?token)")
 
 
 def redact(v):
     if isinstance(v, dict): return {k: "[REDACTED]" if SENSITIVE.search(k) else redact(x) for k,x in v.items()}
     if isinstance(v, list): return [redact(x) for x in v]
     if isinstance(v,str):
+        v=re.sub(r'-----BEGIN (?:[A-Z ]*PRIVATE KEY)-----.*?-----END (?:[A-Z ]*PRIVATE KEY)-----','[REDACTED PRIVATE KEY]',v,flags=re.S)
+        v=re.sub(r'\b(?:xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{30,})','[REDACTED]',v)
         v=re.sub(r"(?i)bearer\s+[A-Za-z0-9._~-]+", "Bearer [REDACTED]",v)
         v=re.sub(r"\b(?:sk-|gh[pousr]_|github_pat_)[A-Za-z0-9_-]{12,}","[REDACTED]",v)
         v=re.sub(r"(?i)((?:api[_-]?key|password|access[_-]?token|secret)\s*[=:]\s*)[^\s,;]+",r"\1[REDACTED]",v)
@@ -97,7 +99,8 @@ def ingest(store):
                         r['status']='ready';jid='job_'+run_id
                         db.execute("INSERT OR IGNORE INTO jobs(id,run_id,status,created_at) VALUES(?,?,'queued',?)",(jid,run_id,now()))
                         # A later SessionEnd must not create a second review or overwrite reviewed.
-                        if store.get('reviews','rv_'+run_id,db): r['status']='reviewed'
+                        prior=store.get('reviews','rv_'+run_id,db)
+                        if prior:r['status']=prior['status']
                     store.put('runs',r,db)
                     count+=1
             p.unlink()
@@ -149,18 +152,24 @@ def accept_review(store, receipt, reviewer):
     return receipt
 
 
-def tick(store,reviewer=None):
+def tick(store,reviewer=None,pipeline=None):
     from .transcripts import observe_session
     for selected in store.list('selected_sessions'):
         try:observe_session(store,selected['path'],selected['session_id'],selected['source'])
         except Exception as ex:store.put('adapter_errors',{'id':selected['id'],'reason_code':str(ex),'created_at':now()})
     n=ingest(store); review=process_one(store,reviewer)
+    if pipeline is None:
+        from .pipeline import EvolutionPipeline
+        pipeline=EvolutionPipeline(store)
+    evolution=pipeline.tick()
     store.put('runtime',{"id":"daemon","status":"running","created_at":now(),"pid":os.getpid(),"heartbeat":time.time()})
-    return {"ingested":n,"processed":bool(review)}
+    return {"ingested":n,"processed":bool(review),"evolution_processed":bool(evolution)}
 
 
 def state(store):
     d={k:store.list(k) for k in ('skills','runs','reviews','experiments','installations','environments')}
+    for experiment in d['experiments']:
+        if experiment.get('state'):experiment['status']=experiment['state']
     d['jobs']=store.jobs();d['settings']=store.settings()
     reviewed=sum(x['status']=='reviewed' for x in d['reviews'])
     daemon=store.get('runtime','daemon') or {}

@@ -6,6 +6,7 @@ import json
 import secrets
 from pathlib import Path
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from .store import atomic_write, canonical, digest, now
 
 
@@ -41,6 +42,39 @@ def validate_verdict(store, verdict):
     return verdict
 
 
+def authority_expired(expires_at):
+    if expires_at is None:return False
+    try:
+        value=datetime.fromisoformat(expires_at.replace('Z','+00:00'))
+        if value.tzinfo is None:raise ValueError('AUTHORITY_TIMEZONE_REQUIRED')
+    except (TypeError,AttributeError,ValueError) as e:
+        raise ValueError('AUTHORITY_EXPIRY_INVALID') from e
+    return value<=datetime.now(timezone.utc)
+
+
+def grant_owner(store,target,authority_id,evidence_sha256,expires_at=None):
+    """Trusted local ingress for an explicit human single-Skill text grant.
+
+    Not exposed over HTTP; the evidence artifact must contain the actual human
+    authorization selected by the calling owner, never a review recommendation.
+    """
+    p=Path(target)
+    if p.is_symlink() or not p.is_file() or p.name!='SKILL.md':raise ValueError('TARGET_NOT_REGULAR_SKILL')
+    p=p.resolve()
+    if '.codex/plugins/cache' in str(p) or '.agents/skills' in str(p):raise ValueError('OWNING_INSTALLER_REQUIRED')
+    skill=next((s for s in store.list('skills') if Path(s['path']).resolve()==p.parent),None)
+    if not skill or skill['owner']!='skill-evolution-loop' or skill['source']!='user-owned':raise ValueError('OWNER_REGISTRY_REQUIRED')
+    if authority_expired(expires_at):raise ValueError('AUTHORITY_EXPIRED')
+    store.read_artifact(evidence_sha256);p.read_bytes().decode('utf-8')
+    g={'id':authority_id,'target':str(p),'owner':'skill-evolution-loop','surface':'single_text_file',
+       'status':'authorized','evidence_sha256':evidence_sha256,'expires_at':expires_at}
+    old=store.get('authority_grants',authority_id)
+    if old:
+        if any(old.get(k)!=v for k,v in g.items()):raise ValueError('AUTHORITY_DRIFT')
+        return old
+    return store.put('authority_grants',{**g,'created_at':now()})
+
+
 def grant(store, target, authority_id, expires_at, evidence_sha256):
     p=Path(target)
     if p.is_symlink() or not p.is_file():raise ValueError('TARGET_NOT_REGULAR')
@@ -57,7 +91,7 @@ def promote(store, candidate_id):
     v=store.get('verdicts',c['verdict_id'])
     validate_verdict(store,v or {})
     g=store.get('grants',c['authority_id'])
-    if not g or g['expires_at']<now() or g['target']!=c['target'] or g['owner']!='skill-observatory':raise ValueError('AUTHORITY_HOLD')
+    if not g or authority_expired(g['expires_at']) or g['target']!=c['target'] or g['owner']!='skill-observatory':raise ValueError('AUTHORITY_HOLD')
     after=store.read_artifact(c['candidate_sha256'])
     if v['parent_sha256']!=c['parent_sha256'] or v['candidate_sha256']!=digest(after):raise ValueError('VERDICT_BINDING_MISMATCH')
     id='inst_'+candidate_id
@@ -108,6 +142,9 @@ def recover(store):
             if i.get('owner')=='skill-evolution-loop' and i['status']=='owner_prepared':
                 from .owner_installers import SkillEvolutionInstaller
                 recovered.append(SkillEvolutionInstaller().apply(store,i['candidate_id']))
+            elif i.get('owner')=='skill-evolution-loop' and i['status']=='owner_rollback_prepared':
+                from .owner_installers import SkillEvolutionInstaller
+                recovered.append(SkillEvolutionInstaller().rollback(store,i))
             elif i['status'] in {'prepared','rollback_prepared'}:recovered.append(_recover(store,i))
         return recovered
 
@@ -117,5 +154,9 @@ def activate(store,id,run_id):
     if not i or not r:raise ValueError('EVIDENCE_MISSING')
     if i['status']!='activation_pending' or r['origin']!='activation_canary':raise ValueError('ACTIVATION_STATE_HOLD')
     if not any(a['attribution'] in {'explicit_loaded','verified_read','executed_script'} and a.get('file_sha256')==i['after_sha256'] for a in r['attributions']):raise ValueError('FRESH_LOAD_EVIDENCE_REQUIRED')
-    if r.get('outcome')!='accepted' or not r.get('fresh_context'):raise ValueError('TASK_VERIFICATION_REQUIRED')
+    if r.get('outcome')!='accepted' or not r.get('fresh_context') or not r.get('outcome_receipt_id'):raise ValueError('TASK_VERIFICATION_REQUIRED')
+    from .outcomes import validate_task_receipt
+    receipt=validate_task_receipt(store,store.get('task_receipts',r['outcome_receipt_id']) or {})
+    if receipt['installation_id']!=id:raise ValueError('TASK_INSTALLATION_MISMATCH')
+    if digest(Path(i['target']).read_bytes())!=i['after_sha256']:raise ValueError('DRIFT_HOLD')
     i.update(status='activated',activated=True,activation_run_id=run_id,updated_at=now());store.put('installations',i);return i

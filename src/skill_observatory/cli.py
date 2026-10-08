@@ -51,7 +51,7 @@ def doctor(store):
             r=subprocess.run([docker,'info','--format','{{.ServerVersion}}'],capture_output=True,text=True,timeout=10)
             check={'available':r.returncode==0,'version':r.stdout.strip() if r.returncode==0 else None,'reason_code':None if r.returncode==0 else 'DOCKER_UNAVAILABLE'}
         except (subprocess.TimeoutExpired,OSError):check={'available':False,'reason_code':'DOCKER_UNAVAILABLE'}
-    return {'runtime':'skill-observatory','python':sys.version.split()[0],'codex_cli':shutil.which('codex') is not None,'docker':check or {'available':False,'reason_code':'DOCKER_MISSING'},'state_private':oct(store.root.stat().st_mode&0o777),'hook_trust':'NATIVE_REVIEW_REQUIRED','model_broker':'UNCONFIGURED','claim_layers':{'loop_operational':'PARTIAL','skill_task_improved':'UNVERIFIED','real_user_outcome_improved':'UNKNOWN'}}
+    return {'runtime':'skill-observatory','python':sys.version.split()[0],'codex_cli':shutil.which('codex') is not None,'docker':check or {'available':False,'reason_code':'DOCKER_MISSING'},'state_private':oct(store.root.stat().st_mode&0o777),'hook_trust':'NATIVE_REVIEW_REQUIRED','model_broker':(store.get('runtime','reviewer') or {}).get('status','UNCONFIGURED'),'claim_layers':{'loop_operational':'PARTIAL','skill_task_improved':'UNVERIFIED','real_user_outcome_improved':'UNKNOWN'}}
 
 
 def main():
@@ -82,8 +82,8 @@ def main():
         elif args.command=='install-hooks':result=install_hooks(s,args.project)
         elif args.command=='uninstall-hooks':result=uninstall_hooks(s,args.project)
         elif args.command=='tick':
-            from .configuration import load_reviewer
-            result=tick(s,load_reviewer(s))
+            from .configuration import load_reviewer,load_pipeline
+            result=tick(s,load_reviewer(s),load_pipeline(s))
         elif args.command=='observe-session':
             from .transcripts import observe_session
             result=observe_session(s,args.path,args.session_id,args.source)
@@ -95,14 +95,14 @@ def main():
         elif args.command=='review-import':result=accept_review(s,json.loads(Path(args.file).read_text()),args.reviewer)
         elif args.command=='rollback':result=rollback(s,args.id)
         elif args.command=='daemon':
-            from .configuration import load_reviewer
-            reviewer=load_reviewer(s)
-            while True:tick(s,reviewer);time.sleep(1)
+            from .configuration import load_reviewer,load_pipeline
+            reviewer=load_reviewer(s);pipeline=load_pipeline(s)
+            while True:tick(s,reviewer,pipeline);time.sleep(1)
         elif args.command=='serve':
             import uvicorn
             from .api import create_app
-            from .configuration import load_reviewer
-            uvicorn.run(create_app(s,args.web_root,reviewer=load_reviewer(s)),host='127.0.0.1',port=args.port);return
+            from .configuration import load_reviewer,load_pipeline
+            uvicorn.run(create_app(s,args.web_root,reviewer=load_reviewer(s),pipeline=load_pipeline(s)),host='127.0.0.1',port=args.port);return
         elif args.command=='export':
             # Deliberate allowlist; excludes names, sessions, paths, artifacts and free text.
             data=state(s);result={'schema_version':1,'claim_layers':doctor(s)['claim_layers'],'counts':{k:len(data[k]) for k in ['skills','runs','reviews','experiments','installations']},'coverage':{'global':None,'reason_code':'GLOBAL_DENOMINATOR_UNKNOWN'}}

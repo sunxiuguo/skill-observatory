@@ -39,3 +39,34 @@ The public runtime does not claim that every third-party Codex configuration
 makes a tool-free context physically isolated. Verify actual advertised tools,
 execution denials, fresh identity and data policy before admitting an adapter.
 Unknown tool isolation blocks certification and automatic promotion.
+
+## Evolution owners and independent final truth
+
+Optional `evolution.json` uses the same private/hash-pinned owner-module format.
+Its module exposes `make_pipeline(store)` and returns an `EvolutionPipeline`
+with trusted proposer, evaluator and activation adapters. The local owner may
+compose canonical installers and signing ingresses; candidate/model workers
+must receive only bounded stage inputs, never the Store, verifier key, labels or
+owner module. Loading an adapter does not certify its OS isolation.
+
+The pipeline holds until the exact single-file human grant exists. Create it
+through trusted local `installations.grant_owner`, with the actual human
+authorization retained as a private evidence artifact. A review recommendation
+cannot serve as a grant. The public UI cannot grant this permission.
+
+`evaluation.paired_evaluate` consumes the final set before any trial and keeps
+measured artifacts/failed costs. `final_gate.finalize` compiles an accepted
+verdict only with matching independently signed domain and all-attempt cost
+receipts, exact parent/candidate binding, measured gain and the frozen cost
+limits. Missing/unknown truth, synthetic cases and reused final sets stay HOLD.
+Domain receipts must establish comparable contexts, independent labels,
+guardrail and regression coverage. Cost receipts include exploration and failed
+attempts; signing is reserved to the trusted canonical accounting owner.
+
+`outcomes.accept_task_result` takes an independently signed task receipt,
+including actual artifact/oracle hashes and a trusted-broker context receipt.
+Activation additionally requires verified Skill bytes and a context created
+after installation. `outcomes.verify_live` requires a different later user run.
+Semantic review, activation and subsequent live verification are separate.
+These adapters require real domain implementations; fixture tests establish
+kernel mechanics only. No configured experience-domain truth is shipped.

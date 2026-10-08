@@ -10,7 +10,7 @@ keeps promotion HOLD. A semantic review is not an independent task evaluation.
 
 ## Install from source
 
-Requires Python 3.12+, uv, Node 22+, npm. Codex CLI is required for native
+Requires Python 3.12+, uv, Node 22.12+ or 24+, npm. Codex CLI is required for native
 observation/model integration. Docker is required only for container evaluation.
 
 ```sh

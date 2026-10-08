@@ -15,11 +15,14 @@ from .runtime import state, tick
 from .installations import rollback, recover
 
 
-def create_app(store=None, web_root=None, daemon=True, reviewer=None):
+def create_app(store=None, web_root=None, daemon=True, reviewer=None,pipeline=None):
     store=store or Store();sessions={}
+    if pipeline is None:
+        from .pipeline import EvolutionPipeline
+        pipeline=EvolutionPipeline(store)
     async def worker():
         while True:
-            try:await asyncio.to_thread(tick,store,reviewer)
+            try:await asyncio.to_thread(tick,store,reviewer,pipeline)
             except Exception as e:store.put('runtime_errors',{'id':str(time.time_ns()),'reason_code':type(e).__name__})
             await asyncio.sleep(1)
     @asynccontextmanager
@@ -34,7 +37,7 @@ def create_app(store=None, web_root=None, daemon=True, reviewer=None):
     @app.middleware('http')
     async def guard(request:Request, call_next):
         host=request.headers.get('host','')
-        if host.split(':')[0] not in {'127.0.0.1','localhost','testserver'}:
+        if host.split(':')[0] not in {'127.0.0.1','localhost'}:
             return JSONResponse({'reason_code':'HOST_REJECTED'},status_code=403)
         origin=request.headers.get('origin')
         expected=f"{request.url.scheme}://{host}"
@@ -81,6 +84,12 @@ def create_app(store=None, web_root=None, daemon=True, reviewer=None):
             if j['reason_code']=='INTERRUPTED_ATTEMPT':raise HTTPException(409,detail={'reason_code':'SIDE_EFFECT_READBACK_REQUIRED'})
             if j['reason_code']=='SEMANTIC_REVIEW_REQUIRED':raise HTTPException(409,detail={'reason_code':'REVIEWER_SETUP_REQUIRED'})
             if j['status'] not in {'hold','failed'}:raise HTTPException(409,detail={'reason_code':'JOB_NOT_RETRYABLE'})
+            # A model timeout, malformed response or connection loss can consume
+            # money and produce output. A browser click cannot authorize replay.
+            attempts=db.execute("SELECT data FROM entities WHERE kind='review_attempts'").fetchall()
+            if any(json.loads(a[0]).get('run_id')==j['run_id'] and
+                   json.loads(a[0]).get('admission_sha256') for a in attempts):
+                raise HTTPException(409,detail={'reason_code':'ATTEMPT_READBACK_REQUIRED'})
             db.execute("UPDATE jobs SET status='queued',reason_code=NULL WHERE id=?",(id,))
         return {'id':id,'status':'queued'}
     @app.post('/api/installations/{id}/rollback')
