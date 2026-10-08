@@ -1,0 +1,15 @@
+.local/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+web/node_modules/
+web/dist/
+docs/research/
+docs/LOCAL_AUDIT.md
+.codex/
+*.egg-info/
+dist/
+src/skill_observatory/static/
+web/.impeccable/
+web/.openai/

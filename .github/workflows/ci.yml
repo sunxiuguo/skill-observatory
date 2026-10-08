@@ -1,0 +1,31 @@
+name: engineering-checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.9.3'
+          python-version: '3.13'
+      - run: uv sync --locked
+      - run: uv run pytest -q
+      - run: uv run python scripts/build.py
+      - run: |
+          uv run skillobs --state /tmp/skillobs-ci serve --port 8765 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8765/api/session && break; sleep 1; done
+          SKILLOBS_TEST_ORIGIN=http://127.0.0.1:8765 npm --prefix web test
+      - run: |
+          uv venv /tmp/skillobs-wheel
+          uv pip install --python /tmp/skillobs-wheel/bin/python dist/*.whl
+          /tmp/skillobs-wheel/bin/skillobs --state /tmp/skillobs-wheel-state doctor
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/*.whl

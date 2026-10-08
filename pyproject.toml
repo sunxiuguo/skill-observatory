@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skill-observatory"
+version = "0.1.0"
+description = "Local-first evidence and bounded evolution for Codex skills"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1", "jsonschema>=4.23,<5"]
+
+[project.scripts]
+skillobs = "skill_observatory.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skill_observatory"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/skill_observatory/static" = "skill_observatory/static"
+
+[tool.hatch.build.targets.sdist]
+include = ["pyproject.toml", "uv.lock", "README.md", "LICENSE", "NOTICE.md", "src/skill_observatory/*.py", "src/skill_observatory/review.schema.json", "src/skill_observatory/static/**", "tests/test_*.py", "web/src/**", "web/package.json", "web/package-lock.json", "web/.npmrc", "web/index.html", "web/vite.config.mjs", "web/vitest.config.mjs", "scripts/build.py", "docs/CONFIGURATION.md", "docs/STATUS.md"]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
