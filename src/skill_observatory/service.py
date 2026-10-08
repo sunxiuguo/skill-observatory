@@ -31,7 +31,10 @@ def service(store,action,port=8765,web_root=None):
         if web_root:args+=['--web-root',str(Path(web_root).resolve())]
         data=plistlib.dumps({'Label':LABEL,'ProgramArguments':args,'RunAtLoad':True,'KeepAlive':True,'WorkingDirectory':str(store.root),'StandardOutPath':str(store.root/'service.stdout.log'),'StandardErrorPath':str(store.root/'service.stderr.log'),'EnvironmentVariables':{'PATH':os.environ.get('PATH','/usr/bin:/bin')}})
         before=target.read_bytes() if target.exists() else None
-        if receipt:current()
+        if receipt and receipt['status']=='uninstalled':
+            actual=digest(before) if before is not None else None
+            if actual!=receipt['before_sha256']:raise ValueError('SERVICE_DRIFT_HOLD')
+        elif receipt:current()
         elif before:raise ValueError('EXISTING_SERVICE_OWNER_REQUIRED')
         if receipt and before==data:return receipt
         if receipt:stop()
