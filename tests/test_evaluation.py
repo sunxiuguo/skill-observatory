@@ -2,16 +2,22 @@
 import json
 import shutil
 import subprocess
+import os
 import pytest
 from skill_observatory.evaluation import DockerSandbox, Environment, EvaluationHold, FixedArtifactOracle, Case, freeze_protocol, paired_evaluate
+
+PINNED_IMAGE='python@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f'
 
 
 @pytest.fixture(scope='module')
 def image():
-    if not shutil.which('docker'):pytest.skip('Docker unavailable')
-    r=subprocess.run(['docker','image','inspect','python:3.12-slim','--format','{{json .RepoDigests}}'],capture_output=True,text=True)
-    if r.returncode:pytest.skip('Pinned canary image not installed')
-    return json.loads(r.stdout)[0]
+    def missing(message):
+        if os.environ.get('SKILLOBS_REQUIRE_CONTAINER')=='1':pytest.fail(message)
+        pytest.skip(message)
+    if not shutil.which('docker'):missing('Docker unavailable')
+    r=subprocess.run(['docker','image','inspect',PINNED_IMAGE],capture_output=True,text=True)
+    if r.returncode:missing('Pinned canary image not installed')
+    return PINNED_IMAGE
 
 
 def test_no_mutable_image_or_arbitrary_shell():
