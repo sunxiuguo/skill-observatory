@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Local-first evidence and bounded evolution for Codex skills"
 requires-python = ">=3.12"
 license = "MIT"
+license-files = ["LICENSE", "NOTICE.md"]
 dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1", "jsonschema>=4.23,<5"]
 
 [project.scripts]
@@ -18,9 +19,10 @@ packages = ["src/skill_observatory"]
 
 [tool.hatch.build]
 artifacts = ["src/skill_observatory/static/**"]
+exclude = ["web/node_modules/**", ".local/**", ".codex/**", ".git/**"]
 
 [tool.hatch.build.targets.sdist]
-include = ["pyproject.toml", "uv.lock", "README.md", "LICENSE", "NOTICE.md", "src/skill_observatory/*.py", "src/skill_observatory/review.schema.json", "src/skill_observatory/static/**", "tests/test_*.py", "web/src/**", "web/package.json", "web/package-lock.json", "web/.npmrc", "web/index.html", "web/vite.config.mjs", "web/vitest.config.mjs", "scripts/build.py", "docs/CONFIGURATION.md", "docs/STATUS.md"]
+include = ["pyproject.toml", "uv.lock", "README.md", "LICENSE", "NOTICE.md", "src/skill_observatory/*.py", "src/skill_observatory/review.schema.json", "src/skill_observatory/static/**", "tests/test_*.py", "web/src/**", "web/package.json", "web/package-lock.json", "web/.npmrc", "web/index.html", "web/vite.config.mjs", "web/vitest.config.mjs", "scripts/build.py", "scripts/verify_distribution.py", "docs/CONFIGURATION.md", "docs/STATUS.md"]
 
 [dependency-groups]
 dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
