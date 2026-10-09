@@ -40,6 +40,18 @@ Installation does not confer trust. No trusted hash is forged. No global
 historical session scan is performed. Hooks persist only scoped event metadata;
 raw prompts and tool output are not spooled.
 
+To cover every project under one explicitly authorized directory, place one
+shared user-level collector while keeping its observation scope restricted:
+
+```sh
+uv run skillobs install-hooks --project "$HOME" --scope /absolute/authorized-root
+```
+
+Review/trust these hooks through Codex's native workflow. Existing hooks are
+preserved; runtime filters exclude events outside the authorized root. Restarts
+or new sessions may be required to load the new hook definitions. This does not
+authorize historical session imports or automatic Skill modification.
+
 For an explicitly selected desktop/CLI session, use the incremental adapter:
 
 ```sh

@@ -14,8 +14,9 @@ from .runtime import EVENTS, spool, tick, state, register, accept_review
 from .installations import recover, rollback
 
 
-def install_hooks(store, project):
+def install_hooks(store, project, scope=None):
     root=Path(project).resolve();p=root/'.codex/hooks.json'
+    scope_root=Path(scope).resolve() if scope is not None else root
     before=p.read_bytes() if p.exists() else None
     data=json.loads(before) if before else {'description':'Skill Observatory scoped observation; native trust required','hooks':{}}
     command=' '.join([shlex.quote(sys.executable),'-m','skill_observatory.cli','--state',shlex.quote(str(store.root)),'hook'])
@@ -25,12 +26,15 @@ def install_hooks(store, project):
         if any(h.get('command')==command for g in groups for h in g.get('hooks',[])):continue
         groups.append({'hooks':[{'type':'command','command':command,'timeout':1 if event in {'SessionEnd','Interrupt'} else 3}]})
     after=canonical(data)
-    if before==after:return {'status':'already_installed','trust':'native_review_required'}
+    if before==after:
+        scopes=store.settings()['scopes']
+        if str(scope_root) not in scopes:store.settings({'scopes':scopes+[str(scope_root)]})
+        return {'status':'already_installed','trust':'native_review_required'}
     receipt={'id':'hooks_'+digest(str(p).encode())[:20],'target':str(p),'before_sha256':store.artifact(before) if before else None,'after_sha256':store.artifact(after),'created_at':now(),'status':'installed','trust':'native_review_required'}
     if p.exists() and before!=p.read_bytes():raise ValueError('HOOK_DRIFT_HOLD')
     atomic_write(p,after);store.put('hook_installations',receipt)
     scopes=store.settings()['scopes']
-    if str(root) not in scopes:store.settings({'scopes':scopes+[str(root)]})
+    if str(scope_root) not in scopes:store.settings({'scopes':scopes+[str(scope_root)]})
     return receipt
 
 
@@ -61,6 +65,7 @@ def main():
     p=sub.add_parser('register');p.add_argument('path');p.add_argument('--owner',required=True);p.add_argument('--license')
     for c in ['install-hooks','uninstall-hooks']:
         p=sub.add_parser(c);p.add_argument('--project',required=True)
+        if c=='install-hooks':p.add_argument('--scope',help='Authorized observation root; defaults to the hook project')
     p=sub.add_parser('serve');p.add_argument('--port',type=int,default=8765);p.add_argument('--web-root')
     p=sub.add_parser('observe-session');p.add_argument('path');p.add_argument('--session-id',required=True);p.add_argument('--source',choices=['codex-desktop','codex-cli','codex-subagent'],required=True)
     for c in ['service-install','service-start','service-stop','service-uninstall','service-status']:
@@ -79,7 +84,7 @@ def main():
         if args.command=='doctor':result=doctor(s)
         elif args.command=='status':result=state(s)
         elif args.command=='register':result=register(s,args.path,args.owner,license=args.license)
-        elif args.command=='install-hooks':result=install_hooks(s,args.project)
+        elif args.command=='install-hooks':result=install_hooks(s,args.project,args.scope)
         elif args.command=='uninstall-hooks':result=uninstall_hooks(s,args.project)
         elif args.command=='tick':
             from .configuration import load_reviewer,load_pipeline
