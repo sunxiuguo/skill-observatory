@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "instruction_files": [
+    "AGENTS.md",
+    "web/AGENTS.md"
+  ],
+  "documents": [
+    "README.md",
+    "docs/PROJECT_CONTRACT.md",
+    "docs/STATUS.md",
+    "docs/CONFIGURATION.md",
+    "docs/CAPABILITY_LIFECYCLE.md",
+    "docs/LIFECYCLE_HANDOFF_PROMPT.md"
+  ],
+  "objectives": {
+    "O1": {
+      "code": [
+        "src/skill_observatory/runtime.py",
+        "src/skill_observatory/transcripts.py"
+      ],
+      "tests": [
+        "tests/test_kernel.py::test_outside_scope_no_private_spool",
+        "tests/test_kernel.py::test_durable_duplicate_restart_and_unknown_truth",
+        "tests/test_transcript_lifecycle.py::test_call_time_version_stays_bound_after_disk_change"
+      ]
+    },
+    "O2": {
+      "code": [
+        "src/skill_observatory/pipeline.py",
+        "src/skill_observatory/final_gate.py",
+        "src/skill_observatory/installations.py",
+        "src/skill_observatory/task_broker.py"
+      ],
+      "tests": [
+        "tests/test_pipeline.py::test_unsigned_verdict_refusal_does_not_reach_installer",
+        "tests/test_pipeline.py::test_missing_exploration_cost_stays_hold",
+        "tests/test_final_gate.py::test_unsupported_gain_cannot_be_promoted_by_receipt_flags",
+        "tests/test_evaluation.py::test_final_set_consumption_survives_restart_and_new_protocol",
+        "tests/test_pipeline.py::test_prepared_restart_requires_side_effect_readback",
+        "tests/test_kernel.py::test_prepared_recovery_and_cas_rollback",
+        "tests/test_task_broker.py::test_candidate_cannot_expand_broker_surface"
+      ]
+    },
+    "O3": {
+      "code": [
+        "src/skill_observatory/outcomes.py"
+      ],
+      "tests": [
+        "tests/test_outcomes.py::test_task_result_requires_independent_signature_and_new_context",
+        "tests/test_outcomes.py::test_result_cannot_accept_drifted_run_or_installation",
+        "tests/test_outcomes.py::test_context_created_during_owner_apply_is_not_fresh",
+        "tests/test_outcomes.py::test_legacy_install_time_unknown_stays_hold",
+        "tests/test_outcomes.py::test_live_verification_refuses_current_disk_drift",
+        "tests/test_outcomes.py::test_later_user_run_records_as_of_readback_evidence"
+      ]
+    },
+    "O4": {
+      "code": [
+        "src/skill_observatory/capture.py",
+        "src/skill_observatory/capabilities.py"
+      ],
+      "tests": [
+        "tests/test_capture.py::test_failure_nonreusable_and_owner_overlap",
+        "tests/test_capture.py::test_skill_creation_requires_root_reviewed_forward_cases",
+        "tests/test_capture.py::test_effectful_code_and_missing_origin_cannot_be_auto_installed",
+        "tests/test_capabilities.py::test_logical_invocations_observation_dedup_attempts_and_stage_counts"
+      ]
+    },
+    "O5": {
+      "code": [
+        "web/src/App.jsx",
+        "web/src/store.tsx",
+        "web/src/Lifecycle.jsx",
+        "scripts/test_web.py"
+      ],
+      "tests": [
+        "web/src/state.test.jsx"
+      ]
+    },
+    "O6": {
+      "code": [
+        "src/skill_observatory/service.py",
+        "scripts/build.py",
+        "scripts/verify_distribution.py"
+      ],
+      "tests": [
+        "tests/test_kernel.py::test_package_binds_scripts_and_rejects_external_symlink",
+        "tests/test_scoped_hooks.py::test_shared_hook_keeps_other_hooks_and_explicit_directory_boundary"
+      ]
+    },
+    "O7": {
+      "code": [
+        "src/skill_observatory/pipeline.py",
+        "src/skill_observatory/evaluation.py"
+      ],
+      "tests": [
+        "tests/test_evaluation.py::test_real_artifact_grading_and_synthetic_final_stays_hold"
+      ]
+    }
+  },
+  "web_scripts": [
+    "build",
+    "test"
+  ],
+  "sdist_required": [
+    "AGENTS.md",
+    "web/AGENTS.md",
+    "docs/PROJECT_CONTRACT.md",
+    "docs/project-contract.json",
+    "docs/LIFECYCLE_HANDOFF_PROMPT.md",
+    "scripts/check_project_contract.py",
+    "scripts/test_web.py",
+    ".github/workflows/ci.yml"
+  ]
+}

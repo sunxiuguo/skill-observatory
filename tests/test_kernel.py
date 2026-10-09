@@ -103,3 +103,36 @@ def test_browser_retry_cannot_replay_consumed_model_attempt(store):
         r=c.post('/api/jobs/'+job['id']+'/retry',headers={'x-csrf-token':csrf})
         assert r.status_code==409 and r.json()['detail']['reason_code']=='ATTEMPT_READBACK_REQUIRED'
     assert store.jobs()[0]['status']=='hold'
+
+
+def test_observation_channels_share_run_but_keep_event_evidence(store):
+    e=event(store)
+    spool(store,e,'codex-hook');spool(store,e,'codex-desktop');ingest(store)
+    runs=store.list('runs')
+    assert len(runs)==1 and len(runs[0]['event_ids'])==2
+    assert len(store.jobs())==1
+
+
+def test_missing_child_identity_does_not_end_parent_turn(store):
+    root=event(store);root['hook_event_name']='UserPromptSubmit';spool(store,root)
+    child=event(store);child['hook_event_name']='SubagentStop';spool(store,child);ingest(store)
+    assert store.list('runs')[0]['status']=='evidence_pending'
+    assert not store.jobs()
+    assert store.list('adapter_errors')[0]['reason_code']=='UPSTREAM_CHILD_IDENTITY_MISSING'
+
+
+def test_redelivery_keeps_original_usage_evidence(store, tmp_path):
+    skill=tmp_path/'flow';skill.mkdir()
+    (skill/'SKILL.md').write_text('---\nname: flow\ndescription: flow\n---\nInstructions.\n')
+    from skill_observatory.runtime import register
+    register(store,skill,'flow-owner')
+    payload=event(store,tool_use_id='read',tool_input={'path':str(skill/'SKILL.md')})
+    spool(store,payload);assert ingest(store)==1
+    first=store.list('capability_observations')
+    assert len(first)==1
+    assert len(store.list('capability_invocations'))==1
+    spool(store,payload)
+    assert ingest(store)==0
+    assert store.list('capability_observations')==first
+    assert len(store.list('capability_invocations'))==1
+    assert not store.list('adapter_errors')

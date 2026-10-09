@@ -1,6 +1,8 @@
 """Synthetic kernel fixtures verify refusals/bindings, never Skill gain."""
 import json
 from pathlib import Path
+import subprocess
+import sys
 import pytest
 from skill_observatory.store import Store, canonical, digest
 from skill_observatory.runtime import register
@@ -31,7 +33,8 @@ def fixture(s,tmp_path):
         'gates':{g:True for g in ('authorization_matches','hashes_current','comparable','independent_final','coverage_sufficient','gain_pass','guardrails_pass','regressions_pass','budget_pass')}})
     s.put('verdicts',verdict);s.put('candidates',{'id':'c','verdict_id':'v'})
     s.put('installations',{'id':'i','candidate_id':'c','status':'activation_pending','target':str(target),
-        'after_sha256':digest(target.read_bytes()),'created_at':'2026-01-01T00:00:00+00:00'})
+        'after_sha256':digest(target.read_bytes()),'created_at':'2026-01-01T00:00:00+00:00',
+        'applied_at':'2026-01-01T00:00:00+00:00'})
     run={'id':'r','session_id':'fresh','origin':'activation_canary','event_ids':['ev'],'attributions':[
         {'attribution':'verified_read','file_sha256':digest(target.read_bytes())}],'outcome':'unverified'}
     s.put('runs',run)
@@ -56,3 +59,68 @@ def test_result_cannot_accept_drifted_run_or_installation(tmp_path):
     s=Store(tmp_path/'state');r=fixture(s,tmp_path);signed=seal_task_receipt(s,r)
     run=s.get('runs','r');run['event_ids'].append('later');s.put('runs',run)
     with pytest.raises(ValueError,match='TASK_EVIDENCE_DRIFT'):accept_task_result(s,signed)
+
+
+def test_context_created_during_owner_apply_is_not_fresh(tmp_path):
+    s=Store(tmp_path/'state');r=fixture(s,tmp_path)
+    installation=s.get('installations','i')
+    installation['applied_at']='2026-01-03T00:00:00Z'
+    s.put('installations',installation)
+    # Context was created after preparation but before completed install readback.
+    with pytest.raises(ValueError,match='PREINSTALL_CONTEXT_REJECTED'):
+        accept_task_result(s,seal_task_receipt(s,r))
+
+
+def test_legacy_install_time_unknown_stays_hold(tmp_path):
+    s=Store(tmp_path/'state');r=fixture(s,tmp_path)
+    installation=s.get('installations','i');installation.pop('applied_at',None)
+    s.put('installations',installation)
+    with pytest.raises(ValueError,match='INSTALLATION_APPLY_TIME_REQUIRED'):
+        accept_task_result(s,seal_task_receipt(s,r))
+
+
+def later_user_run(s,tmp_path):
+    r=fixture(s,tmp_path)
+    accept_task_result(s,seal_task_receipt(s,r));activate(s,'i','r')
+    run={**s.get('runs','r'),'id':'later','session_id':'later-context','origin':'user_run',
+         'event_ids':['later-event'],'outcome':'unverified'}
+    run.pop('outcome_receipt_id',None);s.put('runs',run)
+    context=s.artifact(canonical({'context_id':'later-context','origin':'trusted_broker','fresh':True,
+        'model':'fixture','effort':'fixture','created_at':'2026-01-04T00:00:00Z'}))
+    receipt={**r,'id':'later-receipt','run_id':'later','run_binding_sha256':run_binding(run),
+        'context_receipt_sha256':context}
+    accept_task_result(s,seal_task_receipt(s,receipt))
+
+
+def bounded_live_verification(s):
+    # A separate process with a deadline makes a nested-flock regression fail
+    # instead of hanging the entire CI run. State/receipts remain real fixtures.
+    script='''import json,sys
+from skill_observatory.store import Store
+from skill_observatory.outcomes import verify_live
+try: result=verify_live(Store(sys.argv[1]),'i','later')
+except ValueError as error: result={'error':str(error)}
+print(json.dumps(result))
+'''
+    result=subprocess.run([sys.executable,'-c',script,str(s.root)],capture_output=True,text=True,timeout=10,check=True)
+    return json.loads(result.stdout)
+
+
+@pytest.mark.parametrize('drift',['changed','missing','symlink'])
+def test_live_verification_refuses_current_disk_drift(tmp_path,drift):
+    s=Store(tmp_path/'state');later_user_run(s,tmp_path)
+    target=tmp_path/'SKILL.md'
+    if drift=='changed':target.write_bytes(b'third-party edit')
+    else:
+        target.unlink()
+        if drift=='symlink':
+            other=tmp_path/'other';other.write_bytes(b'fixture installed');target.symlink_to(other)
+    assert bounded_live_verification(s)=={'error':'DRIFT_HOLD'}
+    assert not s.get('installations','i').get('live_verified')
+
+
+def test_later_user_run_records_as_of_readback_evidence(tmp_path):
+    s=Store(tmp_path/'state');later_user_run(s,tmp_path)
+    result=bounded_live_verification(s)
+    assert result['live_verified'] and result['live_verified_at']
+    assert result['verified_skill_sha256']==result['after_sha256']

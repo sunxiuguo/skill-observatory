@@ -37,7 +37,7 @@ class SkillEvolutionInstaller:
         # --allow-risk only acknowledges the matched human grant already checked above.
         result=self.call('apply',incident,'--allow-risk')
         if digest(target.read_bytes())!=c['candidate_sha256']:raise ValueError('OWNER_READBACK_FAILED')
-        item={**prepared,'status':'activation_pending','owner_receipt_artifact':store.artifact(canonical(result))}
+        item={**prepared,'status':'activation_pending','applied_at':now(),'owner_receipt_artifact':store.artifact(canonical(result))}
         store.put('installations',item);return item
     def rollback(self,store,installation):
         target=Path(installation['target'])

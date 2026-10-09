@@ -4,6 +4,7 @@ The trusted domain verifier signs receipts. Candidate/model processes never get
 the verifier key or Store. There is deliberately no HTTP/CLI claim-success API.
 """
 from datetime import datetime
+from pathlib import Path
 import hmac
 import json
 from .store import canonical, digest, now
@@ -39,9 +40,10 @@ def validate_task_receipt(store,receipt):
         raise ValueError('FRESH_CONTEXT_RECEIPT_REQUIRED')
     if context.get('model')!=protocol['model'] or context.get('effort')!=protocol['max_verified_effort']:
         raise ValueError('TASK_MODEL_DRIFT')
+    if not installation.get('applied_at'):raise ValueError('INSTALLATION_APPLY_TIME_REQUIRED')
     try:
         born=datetime.fromisoformat(context['created_at'].replace('Z','+00:00'))
-        installed=datetime.fromisoformat(installation['created_at'].replace('Z','+00:00'))
+        installed=datetime.fromisoformat(installation['applied_at'].replace('Z','+00:00'))
         if born.tzinfo is None or installed.tzinfo is None or born<=installed:raise ValueError()
     except (KeyError,TypeError,ValueError):raise ValueError('PREINSTALL_CONTEXT_REJECTED')
     if not any(a.get('file_sha256')==r['skill_sha256'] and a.get('attribution') in
@@ -65,13 +67,20 @@ def accept_task_result(store,receipt):
 
 
 def verify_live(store,installation_id,run_id):
-    """A later user run is a separate claim from activation and evaluation."""
+    """A later user run and current disk readback, valid as of this receipt."""
     from .installations import lock
+    # Initialize outside the installation transaction; key reads inside are pure.
+    key(store)
     with lock(store):
         i=store.get('installations',installation_id);run=store.get('runs',run_id)
         if not i or not run or i['status']!='activated' or run['origin']!='user_run':raise ValueError('LIVE_STATE_HOLD')
         if run_id==i.get('activation_run_id') or run.get('outcome')!='accepted':raise ValueError('LATER_ACCEPTED_RUN_REQUIRED')
         r=validate_task_receipt(store,store.get('task_receipts',run.get('outcome_receipt_id')) or {})
         if r['installation_id']!=installation_id:raise ValueError('LIVE_INSTALLATION_MISMATCH')
-        i.update(live_verified=True,live_run_id=run_id,updated_at=now())
+        target=Path(i['target'])
+        if target.is_symlink() or not target.is_file() or digest(target.read_bytes())!=i['after_sha256']:
+            raise ValueError('DRIFT_HOLD')
+        verified_at=now()
+        i.update(live_verified=True,live_run_id=run_id,updated_at=verified_at,
+                 live_verified_at=verified_at,verified_skill_sha256=i['after_sha256'])
         return store.put('installations',i)

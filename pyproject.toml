@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skill-observatory"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local-first evidence and bounded evolution for Codex skills"
 requires-python = ">=3.12"
 license = "MIT"
@@ -22,7 +22,7 @@ artifacts = ["src/skill_observatory/static/**"]
 exclude = ["web/node_modules/**", ".local/**", ".codex/**", ".git/**"]
 
 [tool.hatch.build.targets.sdist]
-include = ["pyproject.toml", "uv.lock", "README.md", "LICENSE", "NOTICE.md", "src/skill_observatory/*.py", "src/skill_observatory/review.schema.json", "src/skill_observatory/static/**", "tests/test_*.py", "web/src/**", "web/package.json", "web/package-lock.json", "web/.npmrc", "web/index.html", "web/vite.config.mjs", "web/vitest.config.mjs", "scripts/build.py", "scripts/verify_distribution.py", "docs/CONFIGURATION.md", "docs/STATUS.md"]
+include = ["pyproject.toml", "uv.lock", "README.md", "LICENSE", "NOTICE.md", "src/skill_observatory/*.py", "src/skill_observatory/review.schema.json", "src/skill_observatory/static/**", "tests/test_*.py", "web/src/**", "web/package.json", "web/package-lock.json", "web/.npmrc", "web/index.html", "web/vite.config.mjs", "web/vitest.config.mjs", "scripts/build.py", "scripts/verify_distribution.py", "docs/CONFIGURATION.md", "docs/STATUS.md", "docs/CAPABILITY_LIFECYCLE.md", "AGENTS.md", "web/AGENTS.md", "docs/PROJECT_CONTRACT.md", "docs/project-contract.json", "docs/LIFECYCLE_HANDOFF_PROMPT.md", "scripts/check_project_contract.py", "scripts/test_web.py", ".github/workflows/ci.yml"]
 
 [dependency-groups]
 dev = ["pytest>=8,<10", "httpx>=0.28,<1"]

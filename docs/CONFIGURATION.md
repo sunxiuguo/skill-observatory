@@ -42,6 +42,13 @@ Unknown tool isolation blocks certification and automatic promotion.
 
 ## Evolution owners and independent final truth
 
+Fresh-context task receipts require an installation `applied_at` recorded after
+actual write/readback, rather than the prepared-intent timestamp. Older records
+without that evidence remain `INSTALLATION_APPLY_TIME_REQUIRED`; do not synthesize
+it from `created_at`. Later user-run verification also checks the current regular
+file/hash and records `live_verified_at` plus `verified_skill_sha256`. This is
+evidence as of that readback, not a claim of continuous validity or measured gain.
+
 Optional `evolution.json` uses the same private/hash-pinned owner-module format.
 Its module exposes `make_pipeline(store)` and returns an `EvolutionPipeline`
 with trusted proposer, evaluator and activation adapters. The local owner may

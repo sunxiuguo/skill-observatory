@@ -20,6 +20,9 @@ def lock(store):
 
 def key(store):
     p=store.root/'verifier.key'
+    # Existing immutable key reads must not reacquire the installation flock.
+    # Receipt verification can already run inside that transaction.
+    if p.is_file():return p.read_bytes()
     with lock(store):
         if not p.exists():atomic_write(p,secrets.token_bytes(32))
         return p.read_bytes()
@@ -119,6 +122,7 @@ def _recover(store,i):
         i.update(status='drift_hold',reason_code='DRIFT_HOLD');store.put('installations',i);return i
     if digest(p.read_bytes())!=desired:raise ValueError('READBACK_FAILED')
     i.update(status='rolled_back' if rollback else 'activation_pending',readback_sha256=desired,updated_at=now())
+    if not rollback:i['applied_at']=now()
     store.put('installations',i);return i
 
 

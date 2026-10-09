@@ -215,7 +215,7 @@ export function CopyButton({ value, size = 13 }: { value: string; size?: number 
 
 export function IdCell({ id }: { id: string }) {
   return (
-    <span className="cell-id">
+    <span className="cell-id" title={id}>
       {shortHash(id, 14)}
       <CopyButton value={id} />
     </span>

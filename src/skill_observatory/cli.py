@@ -63,6 +63,16 @@ def main():
     sub=ap.add_subparsers(dest='command',required=True)
     for c in ['doctor','status','hook','tick','daemon','recover']:sub.add_parser(c)
     p=sub.add_parser('register');p.add_argument('path');p.add_argument('--owner',required=True);p.add_argument('--license')
+    p=sub.add_parser('capability-register');p.add_argument('path');p.add_argument('--owner',required=True);p.add_argument('--kind',choices=['skill','script'],default='skill');p.add_argument('--purpose');p.add_argument('--background');p.add_argument('--origin-file');p.add_argument('--scope',required=True);p.add_argument('--id')
+    p=sub.add_parser('discover');p.add_argument('--query',default='');p.add_argument('--cwd',required=True)
+    p=sub.add_parser('artifact-import');p.add_argument('file')
+    p=sub.add_parser('usage-import');p.add_argument('file')
+    p=sub.add_parser('capture');p.add_argument('--spec',required=True);p.add_argument('--auto',action='store_true')
+    for command in ('capture-validate','capture-activate'):
+        p=sub.add_parser(command);p.add_argument('id')
+    p=sub.add_parser('capture-forward');p.add_argument('id');p.add_argument('--receipt',required=True)
+    p=sub.add_parser('capability-retire');p.add_argument('id');p.add_argument('--reason',required=True)
+    p=sub.add_parser('replay');p.add_argument('id');p.add_argument('--input',required=True);p.add_argument('--cwd',required=True);p.add_argument('--session-id',required=True);p.add_argument('--turn-id',required=True);p.add_argument('--scenario',required=True);p.add_argument('--invocation-id',required=True)
     for c in ['install-hooks','uninstall-hooks']:
         p=sub.add_parser(c);p.add_argument('--project',required=True)
         if c=='install-hooks':p.add_argument('--scope',help='Authorized observation root; defaults to the hook project')
@@ -84,6 +94,39 @@ def main():
         if args.command=='doctor':result=doctor(s)
         elif args.command=='status':result=state(s)
         elif args.command=='register':result=register(s,args.path,args.owner,license=args.license)
+        elif args.command=='capability-register':
+            from .capabilities import register_capability
+            result=register_capability(s,args.path,args.owner,kind=args.kind,purpose=args.purpose,background=args.background,origin=json.loads(Path(args.origin_file).read_text()) if args.origin_file else None,scope=args.scope,capability_id=args.id)
+        elif args.command=='discover':
+            from .capabilities import discover
+            result=discover(s,args.query,args.cwd)
+        elif args.command=='artifact-import':
+            data=Path(args.file).read_bytes()
+            if len(data)>8_000_000:raise ValueError('ARTIFACT_TOO_LARGE')
+            from .runtime import redact
+            if redact(data.decode('utf-8'))!=data.decode('utf-8'):raise ValueError('SENSITIVE_ARTIFACT_REJECTED')
+            result={'evidence_sha256':s.artifact(data)}
+        elif args.command=='usage-import':
+            from .capabilities import record_usage
+            result=record_usage(s,json.loads(Path(args.file).read_text()))
+        elif args.command=='capture':
+            from .capture import capture
+            result=capture(s,json.loads(Path(args.spec).read_text()),auto=args.auto)
+        elif args.command=='capture-validate':
+            from .capture import validate_capture
+            result=validate_capture(s,args.id)
+        elif args.command=='capture-activate':
+            from .capture import activate_capture
+            result=activate_capture(s,args.id)
+        elif args.command=='capture-forward':
+            from .capture import accept_skill_forward
+            result=accept_skill_forward(s,args.id,json.loads(Path(args.receipt).read_text()))
+        elif args.command=='capability-retire':
+            from .capture import retire_capability
+            result=retire_capability(s,args.id,args.reason)
+        elif args.command=='replay':
+            from .capture import replay
+            result=replay(s,args.id,json.loads(Path(args.input).read_text()),args.cwd,args.session_id,args.turn_id,args.scenario,args.invocation_id)
         elif args.command=='install-hooks':result=install_hooks(s,args.project,args.scope)
         elif args.command=='uninstall-hooks':result=uninstall_hooks(s,args.project)
         elif args.command=='tick':
@@ -113,6 +156,7 @@ def main():
             data=state(s);result={'schema_version':1,'claim_layers':doctor(s)['claim_layers'],'counts':{k:len(data[k]) for k in ['skills','runs','reviews','experiments','installations']},'coverage':{'global':None,'reason_code':'GLOBAL_DENOMINATOR_UNKNOWN'}}
             atomic_write(Path(args.output),canonical(result))
         print(json.dumps(result,ensure_ascii=False,indent=2))
+        if args.command=='replay' and result['exit_code']!=0:raise SystemExit(1)
     except KeyboardInterrupt:return
     except Exception as ex:
         print(json.dumps({'status':'hold','reason_code':str(ex)},ensure_ascii=False),file=sys.stderr);raise SystemExit(1)

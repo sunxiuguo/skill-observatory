@@ -16,13 +16,11 @@ jobs:
           python-version: '3.13'
           enable-cache: false
       - run: uv sync --locked
+      - run: uv run python scripts/check_project_contract.py
       - run: docker pull python@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f
       - run: SKILLOBS_REQUIRE_CONTAINER=1 uv run pytest -q
       - run: uv run python scripts/build.py
-      - run: |
-          uv run skillobs --state /tmp/skillobs-ci serve --port 8765 &
-          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8765/api/session && break; sleep 1; done
-          SKILLOBS_TEST_ORIGIN=http://127.0.0.1:8765 npm --prefix web test
+      - run: uv run python scripts/test_web.py
       - run: |
           uv venv /tmp/skillobs-wheel
           uv pip install --python /tmp/skillobs-wheel/bin/python dist/*.whl

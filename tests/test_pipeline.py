@@ -202,6 +202,7 @@ class FakeInstaller:
             "activated": False,
             "live_verified": False,
             "created_at": "2026-01-02T00:00:00+00:00",
+            "applied_at": "2026-01-02T00:00:00+00:00",
         }
         return store.put("installations", installation)
 

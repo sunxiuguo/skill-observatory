@@ -180,6 +180,11 @@ export interface ObservatoryState {
   metrics: Metrics;
   settings: Settings;
   capabilities: Capabilities;
+  capability_catalog?: Capability[];
+  capability_versions?: CapabilityVersion[];
+  capability_invocations?: Invocation[];
+  captures?: Capture[];
+  lifecycle_metrics?: Record<string, number>;
 }
 
 export interface SessionInfo {
@@ -191,4 +196,28 @@ export interface ApiError {
   message: string;
   offline?: boolean;
   reason_code?: string;
+}
+
+export interface Capability extends Skill {
+ kind: "skill" | "script";
+ purpose?: string; background?: string; scope: string; version_id: string;
+ born_at?: string | null; first_seen_at: string;
+ origin?: { session_id: string; turn_id: string; project: string; scenario: string; evidence_sha256: string } | null;
+ usage_counts?: Record<string, number>; locations?: string[];
+}
+export interface CapabilityVersion {
+ id: string; capability_id: string; package_sha256: string; created_at: string;
+ manifest: {files: Record<string, string>}; snapshot_sha256: string;
+}
+export interface Invocation {
+ id: string; capability_id: string; version_id: string; session_id: string; turn_id: string;
+ cwd: string; scenario?: string; origin: string; stages: string[]; sources: string[];
+ attempts: string[]; evidence_ids: string[]; created_at: string; status?: string;
+}
+export interface Capture {
+ id: string; name: string; purpose: string; background: string; owner: string;
+ origin: Capability["origin"]; kind?: string; decision: string; status: string;
+ created_at: string; updated_at?: string; capability_id?: string;
+ validation?: {status: string; reason_code?: string; evidence_sha256?: string; positive_passed?: number; negative_passed?: number};
+ reason_code?: string; missing?: string[];
 }

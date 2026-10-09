@@ -8,6 +8,17 @@ reversible service lifecycle are implemented. Skill improvement, automatic
 promotion and recursive gain are **not established**. Missing domain truth
 keeps promotion HOLD. A semantic review is not an independent task evaluation.
 
+## Project maintenance
+
+Read [AGENTS.md](AGENTS.md), [the project contract](docs/PROJECT_CONTRACT.md) and
+[current acceptance status](docs/STATUS.md) before iterating. The contract preserves
+the final goal; status records evidence without treating engineering delivery as
+real Skill or user improvement. Historical handoffs do not grant new authority.
+The owner explicitly authorized automatic task-completion commits and pushes to
+this public repository's main branch; see AGENTS for scope and readback checks.
+Run `uv run python scripts/check_project_contract.py` for governance changes;
+CI also checks instruction discovery, references and required regression routes.
+
 ## Install from source
 
 Requires Python 3.12+, uv, Node 22.12+ or 24+, npm. Codex CLI is required for native
@@ -18,7 +29,7 @@ git clone https://github.com/sunxiuguo/skill-observatory.git
 cd skill-observatory
 uv sync --locked
 uv run python scripts/build.py
-uv pip install --reinstall dist/skill_observatory-0.1.0-py3-none-any.whl
+uv pip install --reinstall dist/skill_observatory-0.2.0-py3-none-any.whl
 uv run skillobs doctor
 uv run skillobs serve --port 8765
 ```
@@ -59,10 +70,30 @@ uv run skillobs observe-session /absolute/selected-session.jsonl \
   --session-id ACTUAL_SESSION_ID --source codex-desktop
 ```
 
-The versioned transcript adapter currently supports the Codex 0.160 family,
+The versioned transcript adapter currently supports the Codex 0.160 family and the verified 0.162.0-alpha.2 shape,
 checks session/scope/cursor identity, and uses the same runtime/spool.
 Exact Skill bytes observed in native tool output can support `verified_read`;
 mentioning/discovering a Skill cannot establish execution.
+
+## Capture and reuse accepted workflows
+
+Version 0.2 adds immutable capability versions, purpose/background and source
+project/session/turn receipts, capture decisions and logical invocation history.
+The capability catalog, capture queue and usage pages share the same private
+ledger. Old capabilities have first-seen dates; unknown birth stays unknown.
+Read, applied, executed and accepted are distinct facts, never summed.
+
+Scoped agents discover related capabilities at task start and route meaningful
+accepted procedures to their canonical creator/owner at stage completion. A
+structured `capture --spec FILE --auto` receipt prefers existing owners. Trusted
+pure JSON commands with actual positive/counterexample tests can be installed
+and replayed locally; judgment Skills require root-reviewed independent forward
+cases. Other side effects stay with their owning authorization/recovery workflow.
+There is no LLM extraction on every Stop and no new scheduler. See the complete
+[creation, replay and maintenance contract](docs/CAPABILITY_LIFECYCLE.md).
+
+Creation functional acceptance does not certify improvement over an existing
+method. Existing signed final/activation/live-outcome gates remain unchanged.
 
 ## Semantic review and owner integration
 
@@ -103,9 +134,12 @@ effects become HOLD and require readback before a retry.
 ## Verify
 
 ```sh
+uv run python scripts/check_project_contract.py
 uv run pytest -q
-# UI state test talks to an actual loopback API, with no mock state fallback.
-SKILLOBS_TEST_ORIGIN=http://127.0.0.1:8765 npm --prefix web test
+# Install Web dependencies first if scripts/build.py has not been run.
+npm --prefix web ci --registry=https://registry.npmjs.org
+# Starts a temporary real API, seeds a synthetic UI ledger, tests, then stops it.
+uv run python scripts/test_web.py
 ```
 
 Container tests use the immutable image digest in `tests/test_evaluation.py`.

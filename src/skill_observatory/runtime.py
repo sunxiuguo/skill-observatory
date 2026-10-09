@@ -41,8 +41,14 @@ def package_manifest(root):
 def register(store, path, owner, source="user-owned", license=None):
     p=Path(path).resolve(); manifest=package_manifest(p)
     id="sk_"+digest(str(p).encode())[:24]
-    s={"id":id,"name":p.name,"path":str(p),"owner":owner,"source":source,"license":license,"status":"observing","package_sha256":manifest['package_sha256'],"manifest":manifest,"created_at":now(),"auto_promote":False,"score":None,"missing":["independent_final_evidence"]}
-    store.put("skills",s);return s
+    previous=store.get("skills",id) or {}
+    s={"id":id,"name":p.name,"path":str(p),"owner":owner,"source":source,"license":license,"status":"observing","package_sha256":manifest['package_sha256'],"manifest":manifest,"created_at":previous.get("created_at",now()),"updated_at":now(),"auto_promote":False,"score":None,"missing":["independent_final_evidence"]}
+    store.put("skills",s)
+    from .capabilities import register_capability
+    roots=store.settings().get('scopes',[])
+    if roots:
+        register_capability(store,p,owner,kind='skill',scope=roots[0])
+    return s
 
 
 def spool(store, payload, source="codex-hook"):
@@ -59,8 +65,16 @@ def spool(store, payload, source="codex-hook"):
     # Persist minimum metadata, not prompt, command or output. Bind original redacted
     # event hash for collision diagnosis; identities provided upstream win.
     body['input_sha256']=digest(canonical(redact(payload)))
+    # Only path-level facts from the current event. No transcript scan or execution.
+    raw=canonical(payload).decode()
+    for cap in store.list('capability_catalog'):
+        entry=str(Path(cap['path'])/('SKILL.md' if cap['kind']=='skill' else 'command.json'))
+        if entry in raw:
+            body.setdefault('capability_observations',[]).append({'capability_id':cap['id'],'version_id':cap['version_id'],'stage':'mentioned'})
     if source in {'codex-desktop','codex-cli','codex-subagent'} and payload.get('verified_attributions'):
         body['attributions']=payload['verified_attributions']
+    if source in {'codex-desktop','codex-cli','codex-subagent'} and payload.get('capability_observations'):
+        body.setdefault('capability_observations',[]).extend(payload['capability_observations'])
     for s in store.list('skills'):
         raw=canonical(payload).decode()
         if str(Path(s['path'])/'SKILL.md') in raw:
@@ -79,17 +93,28 @@ def ingest(store):
             b=p.read_bytes();e=json.loads(b)
             normalized={k:v for k,v in e.items() if k!='created_at'}; h=digest(canonical(normalized))
             with store.connect() as db:
-                old=db.execute('SELECT hash FROM events WHERE id=?',(e['id'],)).fetchone()
+                old=db.execute('SELECT hash,data FROM events WHERE id=?',(e['id'],)).fetchone()
                 if old and old[0]!=h: raise ValueError('EVENT_ID_COLLISION')
+                if old:
+                    # Delivery timestamps are excluded from event identity. Use the
+                    # first durable bytes for downstream evidence on redelivery.
+                    e=json.loads(old[1])
                 if not old:
                     db.execute('INSERT INTO events VALUES(?,?,?,?)',(e['id'],h,b.decode(),e['created_at']))
-                    run_id='run_'+digest(canonical([e.get('source'),e.get('session_id'),e.get('turn_id') or 'turn_unknown',e.get('agent_id')]))[:32]
+                    if e['event'] in {'SubagentStart','SubagentStop'} and not e.get('agent_id'):
+                        store.put('adapter_errors',{'id':e['id'],'reason_code':'UPSTREAM_CHILD_IDENTITY_MISSING','created_at':now()},db)
+                        count+=1
+                        p.unlink()
+                        continue
+                    run_id='run_'+digest(canonical([e.get('session_id'),e.get('turn_id') or 'turn_unknown',e.get('agent_id')]))[:32]
                     # SessionEnd has no turn_id: supplement the last observed run.
                     if e['event']=='SessionEnd' and not e.get('turn_id'):
                         rows=db.execute("SELECT data FROM entities WHERE kind='runs' ORDER BY rowid DESC").fetchall()
                         recent=next((json.loads(x[0]) for x in rows if json.loads(x[0]).get('session_id')==e.get('session_id') and json.loads(x[0]).get('agent_id')==e.get('agent_id')),None)
                         if recent:run_id=recent['id']
-                    r=store.get('runs',run_id,db) or {"id":run_id,"session_id":e.get('session_id'),"turn_id":e.get('turn_id'),"agent_id":e.get('agent_id'),"origin":e['origin'],"created_at":e['created_at'],"event_ids":[],"status":"evidence_pending","outcome":"unverified","attributions":[],"missing":[]}
+                    r=store.get('runs',run_id,db) or {"id":run_id,"session_id":e.get('session_id'),"turn_id":e.get('turn_id'),"agent_id":e.get('agent_id'),"origin":e['origin'],"created_at":e['created_at'],"event_ids":[],"status":"evidence_pending","outcome":"unverified","attributions":[],"missing":[],"cwd":e.get("cwd")}
+                    r.setdefault('sources',[])
+                    if e['source'] not in r['sources']:r['sources'].append(e['source'])
                     r['event_ids'].append(e['id']); r['last_event']=e['event'];r['updated_at']=e['created_at']
                     for a in e.get('attributions',[]):
                         if a not in r['attributions']: r['attributions'].append(a)
@@ -103,6 +128,21 @@ def ingest(store):
                         if prior:r['status']=prior['status']
                     store.put('runs',r,db)
                     count+=1
+            if e.get('source')=='codex-hook' and e.get('transcript_path'):
+                from .transcripts import track_hook_session
+                try:track_hook_session(store,e)
+                except (ValueError,OSError,KeyError) as ex:store.put('adapter_errors',{'id':e['id']+'_transcript','reason_code':str(ex),'created_at':now()})
+            # Idempotent usage ingress after an interrupted event commit.
+            from .capabilities import record_usage
+            for observation in e.get('capability_observations',[]):
+                if e.get('session_id') and e.get('turn_id') and e.get('tool_use_id'):
+                    try:
+                        record_usage(store,{**observation,'session_id':e['session_id'],'turn_id':e['turn_id'],
+                            'cwd':e['cwd'],'invocation_id':e['tool_use_id'],'tool_use_id':e['tool_use_id'],
+                            'source':e['source'],'event_id':e['id']+'_'+observation['capability_id']+'_'+observation['version_id']+'_'+observation['stage'],
+                            'origin':e['origin'],'agent_id':e.get('agent_id'),'evidence_sha256':store.artifact(canonical(e))})
+                    except ValueError as ex:
+                        store.put('adapter_errors',{'id':e['id']+'_'+observation['capability_id'],'reason_code':str(ex),'created_at':now()})
             p.unlink()
         except Exception as ex:
             atomic_write(store.root/'quarantine'/p.name,canonical({"reason_code":str(ex),"sha256":digest(p.read_bytes())}))
@@ -155,6 +195,7 @@ def accept_review(store, receipt, reviewer):
 def tick(store,reviewer=None,pipeline=None):
     from .transcripts import observe_session
     for selected in store.list('selected_sessions'):
+        if selected.get('closed'):continue
         try:observe_session(store,selected['path'],selected['session_id'],selected['source'])
         except Exception as ex:store.put('adapter_errors',{'id':selected['id'],'reason_code':str(ex),'created_at':now()})
     n=ingest(store); review=process_one(store,reviewer)
@@ -168,8 +209,19 @@ def tick(store,reviewer=None,pipeline=None):
 
 def state(store):
     d={k:store.list(k) for k in ('skills','runs','reviews','experiments','installations','environments')}
+    with store.connect() as db:
+        for run in d['runs']:
+            if not run.get('cwd') and run.get('event_ids'):
+                row=db.execute('SELECT data FROM events WHERE id=?',(run['event_ids'][0],)).fetchone()
+                if row:run['cwd']=json.loads(row[0]).get('cwd')
     for experiment in d['experiments']:
         if experiment.get('state'):experiment['status']=experiment['state']
+    from .capabilities import project_lifecycle
+    d.update(project_lifecycle(store));d['captures']=store.list('captures')
+    d['lifecycle_metrics']={'catalog':len(d['capability_catalog']),'captures':len(d['captures']),
+        'active':sum(x.get('status')=='active' for x in d['capability_catalog']),
+        'invocations':len(d['capability_invocations']),'unknown_births':sum(not x.get('born_at') for x in d['capability_catalog']),
+        'capture_holds':sum(x.get('status') in {'hold','failed'} for x in d['captures'])}
     d['jobs']=store.jobs();d['settings']=store.settings()
     reviewed=sum(x['status']=='reviewed' for x in d['reviews'])
     daemon=store.get('runtime','daemon') or {}

@@ -23,6 +23,9 @@ const PREFS_STORAGE_KEY = "so.prefs.v1";
 const POLL_MS = 8000;
 
 export type DrawerTarget =
+  | { kind: "capability"; id: string }
+  | { kind: "capture"; id: string }
+  | { kind: "invocation"; id: string }
   | { kind: "run"; id: string }
   | { kind: "review"; id: string }
   | { kind: "skill"; id: string }
