@@ -70,3 +70,33 @@ after installation. `outcomes.verify_live` requires a different later user run.
 Semantic review, activation and subsequent live verification are separate.
 These adapters require real domain implementations; fixture tests establish
 kernel mechanics only. No configured experience-domain truth is shipped.
+
+## Container task broker
+
+`task_broker.TaskBroker` reuses `DockerSandbox`. The container has no network,
+host mounts, credentials, owner code or final labels. JSON-line IPC permits only
+`snapshot` (an exact frozen name) and `model` (a bounded prompt). The trusted owner
+supplies snapshots after authorized read-only acquisition; this module adds no
+retrieval implementation. Candidate-selected URLs, host paths, shell commands,
+models or permissions are not accepted.
+
+An owner implements `admit(policy)` and `generate(prompt, policy, timeout,
+max_tokens, max_money)` with its existing authenticated transport. Admission
+binds provider/model/maximum effort, data authority and a verified tool-free
+model context. Generation returns `text`, actual `tokens` and `money`,
+provider/model/effort, unique `context_id` and `fresh_context=true`. The adapter
+must be serializable by Python multiprocessing spawn and initialize its transport
+inside generation. A process-group deadline terminates the transport and its
+app-server children. Authentication configuration remains with the owner.
+
+`BrokerPolicy` freezes model call/token/money limits, message size and wall time.
+The transport receives the remaining budget and must enforce it before spending.
+Post-return excess is a contract violation and HOLD, never spending authority.
+Attempt/call intents persist before execution and responses before parsing.
+Unknown/failed model costs remain null; consumed attempt IDs cannot be replayed.
+These receipts do not include independent domain grades or certify a model owner.
+
+Actual-container tests use a synthetic owner for IPC, denials, artifacts,
+deadline termination, usage gaps and restart-safe replay refusal. Live model
+certification and integration with paired evaluation/domain truth remain pending.
+The default service does not automatically enable this adapter.

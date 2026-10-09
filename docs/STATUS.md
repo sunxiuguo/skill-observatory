@@ -1,9 +1,10 @@
-# Acceptance status — 2026-10-08
+# Acceptance status — 2026-10-09
 
 | Layer | Evidence | State |
 |---|---|---|
 | Durable kernel | Scope/privacy, dedupe/restart, unknown-attempt HOLD, hash/CAS, CSRF, settings checks | Verified locally |
 | Strong container mechanics | Real Docker execution, immutable image, no network/host mount/secrets/socket, non-root, independent containers, host oracle | Verified locally |
+| Container/model IPC broker | Existing container runner plus exact read-only snapshots, fixed model admission, process-group deadline, durable call intents, usage/readback and replay refusal | Actual-container mechanism verified with synthetic owner; live adapter/domain integration pending |
 | Actual native observation | Native hook trust readback; scoped CLI terminal/interrupt events; explicitly selected desktop transcript with exact Skill read | Partial coverage |
 | Semantic review | Real admitted external model returns HOLD/NO_CHANGE; launchd consumes queued real events including a verified-read Skill turn; actual usage receipts | Operational within admitted scope; missing outcome truth |
 | Automatic evolution sequencing | Deterministic review-bound experiments, bounded owner adapters, single-writer claims, prepared intent recovery, signed final verdict → original installer → independent activation ingress | Mechanism implemented/tested; no real promoted candidate |
@@ -22,6 +23,7 @@ Container measurements retain domain guardrail/cost gaps. The fixed final-gate
 compiler can combine them with independently signed, hash-bound domain and
 all-attempt cost receipts under a frozen cost policy; it cannot invent those
 receipts. Final sets are durably consumed once across protocol IDs, including
-failed/HOLD attempts. General trusted tool/model isolation and a calibrated
-domain evaluator for the experience pilot remain unfinished. This preview must
+failed/HOLD attempts. The bounded container/model IPC mechanism is implemented.
+A live admitted tool-free model adapter, its integration with paired evaluation,
+and a calibrated domain evaluator for the experience pilot remain unfinished. This preview must
 not be described as full closure.
