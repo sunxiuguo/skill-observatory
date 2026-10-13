@@ -67,7 +67,7 @@ test('live lifecycle catalog and usage keep stage evidence and recover filters',
  fireEvent.click(screen.getByRole('button',{name:'English',exact:true}));
  await screen.findByLabelText('Status or stage');
  expect(screen.getByLabelText('Status or stage').value).toBe('accepted');
- expect(screen.getByText('No matching records')).toBeTruthy();
+ expect(await screen.findByText('No matching records')).toBeTruthy();
 });
 
 test('live retained detail waits for summary on remount instead of crashing',async()=>{
