@@ -1,16 +1,15 @@
 # Current acceptance — 2026-10-13
 
-The reliability source iteration repairs the audited observation, review,
+The reliability iteration repairs the audited observation, review,
 consumption and Web state defects. [RELIABILITY.md](RELIABILITY.md) maps R1–R13
-to implementations, refusal evidence and remaining boundaries. This is a source
-engineering acceptance; the existing user service has not been upgraded or
-restarted. Existing hook helpers load source independently; additive SQLite
-schema version 2 is observed, while the running server retains its old loaded
-code. Its collection stall remains a production issue pending authorized
-service update and loaded-build/event/spool readback. The exact blocking stack
-root cause is still UNKNOWN.
+to implementations, refusal evidence and remaining boundaries. The separately
+owner-authorized user-service upgrade is applied through the original lifecycle
+with private SQLite/spool backups and a rollback wheel. The loaded runtime and
+actual HTTP assets match the installed package; collection advances and the
+stalled backlog drains. The exact prior blocking stack root cause is still
+UNKNOWN. This acceptance does not establish real Skill or user improvement.
 
-Local acceptance: 105 backend cases including required real Docker execution;
+Local acceptance: 111 backend cases including required real Docker execution;
 9 Web tests against an isolated real API, including control failure and retained
 detail remount; exact App/subagent/CLI fixtures; server-side pages and full-ledger
 counts; required packaging/install gates are checked on the final source. Browser
@@ -21,11 +20,40 @@ Final Git/CI identity is read back at delivery, not inferred from this document.
 | Evidence layer | Current boundary |
 |---|---|
 | Local engineering mechanisms | Accepted with actual applicable tests and browser readback |
-| Existing production collection/review | Update/readback pending; previous healthy HTTP cannot prove progress |
+| Existing production collection | Loaded code/assets, advancing event ledger, drained backlog, independent worker progress and unchanged authority/settings verified |
+| Existing production semantic review | Configured, not certified; old admitted/unknown attempts remain unchanged; budget deferral and missing factual/admission evidence keep live review HOLD |
 | Provider background admission | Explicit owner interface implemented; canonical background-job adapter pending |
 | Real Skill pilot / natural user gain | HOLD / UNKNOWN; synthetic broker integration and canaries do not replace domain truth |
 | Method recursive improvement | UNVERIFIED |
 | Cross-project/global updates | Outside this iteration's write authority |
+
+The upgrade exposed a legacy deduplication mismatch: seven existing SessionEnd
+deliveries differed only by the new execution identity derived from the same
+stored session/agent. The kernel now accepts that exact equivalence while
+preserving the first durable bytes. Parent/child positives and changed identity,
+content, root identity and stored-hash refusals pass. Isolated replay of the seven
+actual records preserves events, jobs and model attempts; production reconciliation
+keeps the original quarantine evidence in the private backup.
+
+Same-ledger upgrade snapshots from 12:06 to 12:29 UTC on 2026-10-13 show
+84,636 → 102,748 stored events; the initially stalled 15,362-file spool drains,
+and the final snapshot has zero spool/quarantine files with fresh worker progress.
+The increase includes previously queued deliveries and newly observed events;
+it is not a count of new completed user tasks. Queue arrivals continue normally.
+
+Production attribution readback checks 2,735 new-event observation receipts mapped
+to 2,555 logical invocations, with zero identity mismatches. Two actual logical
+invocations combine hook/subagent channels, and selected child runs retain
+execution, immediate-parent and root identity. These denominators cover observed
+receipts only; absent historical identities, unsupported transcript shapes and
+the global denominator remain UNKNOWN/HOLD. All 716 pre-upgrade model attempts,
+owner grants, hook/service receipts, settings and dependency versions are retained.
+
+Production browser readback confirms the real catalog count/page, detail content
+and Escape recovery. The previous isolated nine-test and wide/narrow browser
+evidence remains applicable to unchanged frontend bytes. No live model request,
+real domain pilot or promotion is introduced by the upgrade. Source packaging,
+Git and final-head CI identities are checked at delivery.
 
 ## Historical acceptance snapshot — 2026-10-09
 

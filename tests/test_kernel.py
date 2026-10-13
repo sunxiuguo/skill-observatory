@@ -136,3 +136,41 @@ def test_redelivery_keeps_original_usage_evidence(store, tmp_path):
     assert store.list('capability_observations')==first
     assert len(store.list('capability_invocations'))==1
     assert not store.list('adapter_errors')
+
+
+@pytest.mark.parametrize('agent_id', [None, 'child'])
+def test_legacy_execution_redelivery_preserves_original_event_and_usage(store, tmp_path, agent_id):
+    from skill_observatory.runtime import register
+    skill=tmp_path/'flow';skill.mkdir();(skill/'SKILL.md').write_text('flow')
+    register(store,skill,'flow-owner')
+    payload=event(store,agent_id=agent_id,tool_use_id='read',tool_input={'path':str(skill/'SKILL.md')})
+    receipt=spool(store,payload);path=store.root/'spool'/f"{receipt['id']}.json"
+    legacy=json.loads(path.read_text());legacy.pop('execution_session_id')
+    path.write_bytes(canonical(legacy));assert ingest(store)==1
+    with store.connect() as db:original=tuple(db.execute('SELECT hash,data FROM events WHERE id=?',(receipt['id'],)).fetchone())
+    observations=store.list('capability_observations');invocations=store.list('capability_invocations')
+    runs=store.list('runs');jobs=store.jobs()
+    spool(store,payload);assert ingest(Store(store.root))==0
+    with store.connect() as db:assert tuple(db.execute('SELECT hash,data FROM events WHERE id=?',(receipt['id'],)).fetchone())==original
+    assert store.list('runs')==runs and store.jobs()==jobs
+    assert store.list('capability_observations')==observations
+    assert store.list('capability_invocations')==invocations
+    assert not list((store.root/'quarantine').glob('*'))
+
+
+@pytest.mark.parametrize('difference', ['execution_session_id','tool_name','root_session_id','stored_hash'])
+def test_legacy_execution_redelivery_rejects_identity_content_and_hash_drift(store, difference):
+    payload=event(store);receipt=spool(store,payload)
+    path=store.root/'spool'/f"{receipt['id']}.json"
+    legacy=json.loads(path.read_text());legacy.pop('execution_session_id');path.write_bytes(canonical(legacy))
+    assert ingest(store)==1
+    if difference=='stored_hash':
+        with store.connect() as db:db.execute('UPDATE events SET hash=? WHERE id=?',('a'*64,receipt['id']))
+    with store.connect() as db:original=tuple(db.execute('SELECT hash,data FROM events WHERE id=?',(receipt['id'],)).fetchone())
+    runs=store.list('runs');jobs=store.jobs();spool(store,payload)
+    if difference!='stored_hash':
+        incoming=json.loads(path.read_text());incoming[difference]='different';path.write_bytes(canonical(incoming))
+    assert ingest(store)==0
+    assert json.loads((store.root/'quarantine'/path.name).read_text())['reason_code']=='EVENT_ID_COLLISION'
+    with store.connect() as db:assert tuple(db.execute('SELECT hash,data FROM events WHERE id=?',(receipt['id'],)).fetchone())==original
+    assert store.list('runs')==runs and store.jobs()==jobs

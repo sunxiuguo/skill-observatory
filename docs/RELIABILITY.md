@@ -4,14 +4,14 @@ This iteration repairs the evidence chain under O1/O2/O4/O5/O6. It preserves
 SQLite, canonical owners, signed independent truth, original installers, CAS,
 no replay and separate evaluated/installed/activated/live-verified claims.
 Engineering acceptance does not establish Skill improvement, user gain or
-recursive improvement. The user-service process is not restarted by this source
-delivery. Existing hook helpers can load current source independently; additive
-SQLite schema version 2 is observed while the server retains its old loaded code.
+recursive improvement. The subsequent owner-authorized service upgrade uses the
+original lifecycle, retained private state and validated wheel. Loaded runtime
+and HTTP asset hashes are read back together; collection is advancing again.
 
 | Audit item | Implemented behavior | Acceptance and remaining boundary |
 |---|---|---|
-| R1 | Independent collection/review/evolution lifecycles; loaded build, phase/progress/spool diagnostics; configured review process-group deadline | Blocked review does not stop collection; real configured callback is terminated and its unknown attempt retained. Exact production blocking stack remains UNKNOWN; authorized service upgrade/readback is pending. |
-| R2 | Execution, immediate parent, root and agent identities; channel-independent run/invocation identity | Desktop/subagent metadata, nested parent and exact read across hook/transcript channels tested. |
+| R1 | Independent collection/review/evolution lifecycles; loaded build, phase/progress/spool diagnostics; configured review process-group deadline | Blocked review does not stop collection; real configured callback is terminated and its unknown attempt retained. Authorized production upgrade restores collection and drains the backlog. Exact prior blocking stack remains UNKNOWN. |
+| R2 | Execution, immediate parent, root and agent identities; channel-independent run/invocation identity | Desktop/subagent metadata, nested parent and exact read across hook/transcript channels tested. Actual hook/subagent receipts share logical invocations. Legacy redelivery may add only the identical derived execution identity; original event bytes remain unchanged, and identity/content/hash drift still refuses. |
 | R3 | Central exact version/source/schema contract; bounded aggregate collector errors; explicit archived-pointer CAS relocation | Certified 0.160.0/0.160.1 and 0.162.0-alpha.2 fixtures; exact 0.162.0-alpha.17.2 App/subagent fixtures. Future/incompatible shapes stay HOLD. No global archive enumeration or history import. |
 | R4 | Persist session terminal envelopes; reconstruct binding with UTC source times; unknown ordering stays unknown | Same-batch and late/restarted order, offset timestamps and missing-time refusals tested. Envelopes alone do not start another semantic review. |
 | R5 | Bounded selected EvidenceCapsule, observed owner/version binding, privacy checks and deterministic preflight | Index-only and drifted facts cannot dispatch. Facts need explicit capsule-specific Provider data authority. Real classification/value comparison still NOT_RUN. |
@@ -42,16 +42,18 @@ measurements, not production latency or causal user-benefit evidence.
 
 Browser verification found and repaired retained-detail startup ordering and
 flex-shrink clipping of detail card content. Layout evidence uses an isolated
-synthetic ledger; representative human usability remains UNKNOWN. No production
-service restart, global hook/Skill definition, trading task, other repository,
-paid model or cloud permission was changed. The service directly serves the
-ignored source-static directory: after build verification, its original frontend
-was reconstructed from the pre-iteration source and read back over HTTP, keeping
-the old API and page together. New assets remain in the isolated test build and
-wheel; an authorized upgrade must verify backend and assets as one identity. The existing public-source Git delivery authorization
-applies independently from service deployment.
+synthetic ledger; representative human usability remains UNKNOWN. The source
+delivery initially preserved the old API and reconstructed frontend together.
+The separately authorized upgrade then stopped the original service, retained
+SQLite/spool and rollback materials, installed the validated wheel and restarted
+through the same owner. The loaded runtime, actual API and static bytes match.
+An additional production-discovered legacy redelivery defect was repaired with
+positive/refusal regressions; seven equivalent historical deliveries were
+reconciled without rewriting their durable events or replaying model attempts.
+Original quarantine evidence is retained privately. Global hook/Skill definitions,
+trading tasks, other repositories, paid models and cloud permissions are unchanged.
 
 Reusable lesson disposition: **project_record**. Runtime defects belong to their
 existing implementation owners and regression tests. No global Skill, parallel
 scheduler or additional capability owner is created. Domain truth, background
-Provider admission and production readback are explicit follow-up gates.
+Provider admission and real domain evidence remain explicit follow-up gates.

@@ -107,7 +107,15 @@ def ingest(store):
             normalized={k:v for k,v in e.items() if k!='created_at'}; h=digest(canonical(normalized))
             with store.connect() as db:
                 old=db.execute('SELECT hash,data FROM events WHERE id=?',(e['id'],)).fetchone()
-                if old and old[0]!=h: raise ValueError('EVENT_ID_COLLISION')
+                if old and old[0]!=h:
+                    prior={k:v for k,v in json.loads(old[1]).items() if k!='created_at'}
+                    # Older collectors omitted this derived field. Accept only an
+                    # exact redelivery with the same fallback execution identity;
+                    # keep the original durable bytes and reject every other drift.
+                    legacy_equivalent=('execution_session_id' not in prior
+                        and old[0]==digest(canonical(prior))
+                        and canonical({**prior,'execution_session_id':prior.get('agent_id') or prior.get('session_id')})==canonical(normalized))
+                    if not legacy_equivalent:raise ValueError('EVENT_ID_COLLISION')
                 if old:
                     # Delivery timestamps are excluded from event identity. Use the
                     # first durable bytes for downstream evidence on redelivery.
