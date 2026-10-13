@@ -129,3 +129,48 @@ def test_failed_current_admission_has_no_attempt_or_process(tmp_path):
     with pytest.raises(EvaluationHold, match='MODEL_OWNER_ADMISSION_HOLD'):
         b.run('held', {'task.py': b''}, 'task.py', Environment(IMAGE))
     assert b.store.list('broker_attempts') == []
+
+
+class SyntheticPairedOwner(SyntheticOwner):
+    def generate(self,*args,**kwargs):
+        import uuid
+        result=super().generate(*args,**kwargs)
+        result['context_id']='synthetic-'+uuid.uuid4().hex
+        return result
+
+
+def test_actual_broker_paired_runner_frozen_identity_and_missing_domain(image,tmp_path):
+    from skill_observatory.task_broker import BrokerPairedRunner
+    from skill_observatory.evaluation import Case,FixedArtifactOracle,freeze_protocol,paired_evaluate
+    from skill_observatory.store import digest
+    b=broker(tmp_path,SyntheticPairedOwner());runner=BrokerPairedRunner(b)
+    code=b'''import json,sys
+from pathlib import Path
+print('{"op":"model","prompt":"synthetic bounded fixture"}',flush=True)
+r=json.loads(sys.stdin.readline())
+Path('/out/result').write_text(r['text'])
+'''
+    arms={'task.py':code};cases=[Case('synthetic-a',{'input':b'a'},'synthetic','final',digest(b'a'))]
+    oracle=FixedArtifactOracle({'synthetic-a':{'result':b'synthetic response'}})
+    p=freeze_protocol(arms,arms,cases,oracle,Environment(image),'fixture','max',execution_identity=runner.execution_identity)
+    result=paired_evaluate(p,arms,arms,cases,oracle,'task.py',b.store,runner=runner)
+    assert result['status']=='hold' and len(result['trials'])==2
+    assert all(t['cost']=={'money':0,'tokens':3} for t in result['trials'])
+    assert all(t['receipt']['execution_identity']==p['execution_identity'] for t in result['trials'])
+    assert 'DOMAIN_GUARDRAIL_RECEIPT_REQUIRED' in result['missing']
+    assert 'REAL_CASE_EVIDENCE_REQUIRED' in result['missing']
+    assert 'MODEL_EXECUTION_RECEIPT_REQUIRED' not in result['missing']
+
+
+def test_actual_intersecting_final_cases_block_before_any_new_container(image,tmp_path):
+    from skill_observatory.evaluation import Case,FixedArtifactOracle,freeze_protocol,paired_evaluate
+    from skill_observatory.store import digest
+    store=Store(tmp_path/'state');arm={'task.py':b"from pathlib import Path;Path('/out/result').write_text('ok')"}
+    a=Case('a',{'input':b'a'},'synthetic','final',digest(b'a'));b=Case('b',{'input':b'b'},'synthetic','final',digest(b'b'))
+    def run(cases):
+        oracle=FixedArtifactOracle({c.id:{'result':b'ok'} for c in cases})
+        p=freeze_protocol(arm,arm,cases,oracle,Environment(image),'deterministic-python','none')
+        return paired_evaluate(p,arm,arm,cases,oracle,'task.py',store)
+    first=run([a]);assert len(first['trials'])==2
+    with pytest.raises(EvaluationHold,match='FINAL_SET_ALREADY_CONSUMED'):run([a,b])
+    assert len(store.list('evaluation_attempts'))==1

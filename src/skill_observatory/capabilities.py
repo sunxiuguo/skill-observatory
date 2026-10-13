@@ -8,6 +8,25 @@ from .store import canonical,digest,now
 STAGES=('mentioned','selected','verified_read','declared_applied','executed','accepted')
 
 
+def capability_projection(store,cap,db):
+    """Full-ledger counters and explicit authority facts; registration grants nothing."""
+    cap=dict(cap)
+    uses=[json.loads(r[0]) for r in db.execute("SELECT data FROM entities WHERE kind='capability_invocations' AND json_extract(data,'$.capability_id')=?",(cap['id'],))]
+    cap.update(usage_counts={k:sum(k in u['stages'] for u in uses) for k in STAGES},invocation_count=len(uses),
+        canary_invocation_count=sum(u.get('origin')=='activation_canary' for u in uses),
+        projects=sorted({u['cwd'] for u in uses}),session_count=len({u['session_id'] for u in uses}),usage_scope='observed_receipts_only')
+    from .installations import authority_expired
+    authorized=False
+    for row in db.execute("SELECT data FROM entities WHERE kind='authority_grants'"):
+        grant=json.loads(row[0])
+        if grant.get('status')=='authorized' and grant.get('target')==str(Path(cap['path'])/'SKILL.md') and grant.get('owner')=='skill-evolution-loop' and grant.get('package_sha256')==cap['package_sha256'] and not authority_expired(grant.get('expires_at')):
+            authorized=True
+    cap['evaluation_projection']={'version_id':cap['version_id'],'owner_authorized':authorized,
+        'status':'owner_authorized_missing_independent_truth' if authorized else 'registration_only',
+        'eligible':False,'missing':['INDEPENDENT_DOMAIN_TRUTH_REQUIRED','ALL_ATTEMPT_COST_REQUIRED']+([] if authorized else ['OWNER_AUTHORITY_REQUIRED'])}
+    return cap
+
+
 def _scope(store,scope):
     p=Path(scope).resolve()
     if not any(p==Path(s).resolve() or Path(s).resolve() in p.parents for s in store.settings()['scopes']):raise ValueError('OUTSIDE_SCOPE')
@@ -72,6 +91,14 @@ def register_capability(store,path,owner,kind='skill',purpose=None,background=No
                    'created_at':t,'registered_at':t,'first_seen_at':t,'born_at':None,'version_id':vid,'package_sha256':m['package_sha256'],
                    'missing':[] if origin else ['CREATION_ORIGIN_UNKNOWN'],'usage_counts':{k:0 for k in STAGES}}
         store.put('capability_catalog',value,db)
+        # Legacy evaluator identity is a projection of the immutable version,
+        # never a second mutable package fact or a new authority grant.
+        if kind=='skill':
+            sid='sk_'+digest(str(p).encode())[:24]
+            old_skill=store.get('skills',sid,db)
+            if old_skill:
+                store.put('skills',{**old_skill,'capability_id':capid,'version_id':vid,
+                    'package_sha256':m['package_sha256'],'manifest':m,'updated_at':t},db)
     return value
 
 
@@ -115,8 +142,11 @@ def record_usage(store,receipt):
 
 def project_lifecycle(store):
     catalog=store.list('capability_catalog');invocations=store.list('capability_invocations')
+    from collections import defaultdict
+    grouped=defaultdict(list)
+    for u in invocations:grouped[u['capability_id']].append(u)
     for cap in catalog:
-        uses=[u for u in invocations if u['capability_id']==cap['id']]
+        uses=grouped[cap['id']]
         cap['usage_counts']={k:sum(k in u['stages'] for u in uses) for k in STAGES}
         cap['invocation_count']=len(uses)
         cap['canary_invocation_count']=sum(u.get('origin')=='activation_canary' for u in uses)
@@ -129,13 +159,27 @@ def project_lifecycle(store):
 def discover(store,query,cwd):
     try:_scope(store,cwd)
     except ValueError:return []
-    p=Path(cwd).resolve();words=[x for x in re.split(r'[\s,;/]+',query.casefold()) if x]
+    p=Path(cwd).resolve();words=_tokens(query)
     candidates=[]
-    for cap in project_lifecycle(store)['capability_catalog']:
+    for cap in store.list('capability_catalog'):
         scope=Path(cap['scope']).resolve()
         if (p!=scope and scope not in p.parents) or cap['status'] in {'retired','quarantined','hold'}:continue
-        content=' '.join(str(cap.get(k) or '') for k in ('name','description','purpose')).casefold()
-        score=sum(w in content for w in words)
-        if not words or score:candidates.append((score,cap['name'],cap))
-    candidates.sort(key=lambda x:(-x[0],x[1]))
-    return [cap for _,_,cap in candidates[:10]]
+        content=' '.join(str(cap.get(k) or '') for k in ('name','description','purpose','aliases')).casefold()
+        score=sum(len(w) for w in words if w in content)
+        if not words or score:
+            with store.connect() as db:cap=capability_projection(store,cap,db)
+            try:
+                current=_manifest(Path(cap['path']),cap['kind'])
+                if current['package_sha256']!=cap['package_sha256']:
+                    cap={**cap,'freshness':'drift','eligible_for_reuse':False,'reason_code':'CAPABILITY_VERSION_DRIFT'}
+                else:cap={**cap,'freshness':'verified_current','eligible_for_reuse':True}
+            except (OSError,ValueError):cap={**cap,'freshness':'unavailable','eligible_for_reuse':False,'reason_code':'CAPABILITY_READBACK_REQUIRED'}
+            candidates.append((score,len(scope.parts),cap['name'],cap))
+    candidates.sort(key=lambda x:(-x[0],-x[1],x[2]))
+    return [cap for *_,cap in candidates[:10]]
+
+
+def _tokens(text):
+    """Deterministic Latin tokens and Chinese bigrams; no semantic gain claim."""
+    words=re.findall(r'[a-z0-9_-]+|[\u4e00-\u9fff]+',text.casefold())
+    return set(part for w in words for part in ([w[i:i+2] for i in range(len(w)-1)] if re.fullmatch(r'[\u4e00-\u9fff]{3,}',w) else [w]))

@@ -53,7 +53,7 @@ test('live lifecycle catalog and usage keep stage evidence and recover filters',
  expect(document.activeElement.textContent).toBe('关闭');
  fireEvent.keyDown(document,{key:'Tab'});
  expect(document.activeElement.textContent).toBe('中文');
- expect(screen.getAllByText('UNKNOWN').length).toBeGreaterThan(0);
+ expect((await screen.findAllByText('UNKNOWN')).length).toBeGreaterThan(0);
  expect(screen.getByLabelText('各阶段独立计数').textContent).toContain('已执行1');
  expect(screen.getByLabelText('各阶段独立计数').textContent).toContain('已验收0');
  fireEvent.keyDown(document,{key:'Escape'});
@@ -68,4 +68,23 @@ test('live lifecycle catalog and usage keep stage evidence and recover filters',
  await screen.findByLabelText('Status or stage');
  expect(screen.getByLabelText('Status or stage').value).toBe('accepted');
  expect(screen.getByText('No matching records')).toBeTruthy();
+});
+
+test('live retained detail waits for summary on remount instead of crashing',async()=>{
+ localStorage.clear();location.hash='#skills';
+ const session=await(await fetch('/api/session')).json();
+ await fetch('/api/settings',{method:'POST',headers:{'content-type':'application/json','x-csrf-token':session.csrf},body:JSON.stringify({locale:'zh-CN'})});
+ const data=await(await fetch('/api/summary')).json();
+ localStorage.setItem('so.ui.v1',JSON.stringify({filters:{},drawer:{kind:'capability',id:data.capability_catalog[0].id},settingsDraft:null,route:'skills'}));
+ const realFetch=globalThis.fetch;
+ globalThis.fetch=async(input,options={})=>{
+  if(input==='/api/summary')await new Promise(resolve=>setTimeout(resolve,100));
+  return realFetch(input,options);
+ };
+ try{
+  render(<App/>);
+  await screen.findByRole('dialog');
+  await screen.findByLabelText('各阶段独立计数');
+  expect(screen.getByLabelText('各阶段独立计数').textContent).toContain('已执行1');
+ }finally{cleanup();globalThis.fetch=realFetch;}
 });

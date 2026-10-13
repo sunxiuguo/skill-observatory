@@ -5,11 +5,14 @@ import queue
 import subprocess
 import threading
 import time
+import os
+import signal
 
 
 class AppServer:
     def __init__(self, executable='codex', args=(), env=None):
-        self.proc=subprocess.Popen([executable,'app-server','--stdio',*args],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,env=env)
+        self.owns_group=os.environ.get('SKILLOBS_REVIEW_WORKER')!='1'
+        self.proc=subprocess.Popen([executable,'app-server','--stdio',*args],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,env=env,start_new_session=self.owns_group)
         self.messages=queue.Queue();self.notifications=[];self.id=0
         threading.Thread(target=self._read,daemon=True).start()
         self.request('initialize',{'clientInfo':{'name':'skill_observatory','title':'Skill Observatory','version':'0.1.0'}})
@@ -35,7 +38,14 @@ class AppServer:
     def close(self):
         self.proc.stdin.close()
         try:self.proc.wait(timeout=3)
-        except subprocess.TimeoutExpired:self.proc.terminate();self.proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            if self.owns_group:os.killpg(self.proc.pid,signal.SIGTERM)
+            else:self.proc.terminate()
+            try:self.proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                if self.owns_group:os.killpg(self.proc.pid,signal.SIGKILL)
+                else:self.proc.kill()
+                self.proc.wait(timeout=3)
     def __enter__(self):return self
     def __exit__(self,*args):self.close()
 

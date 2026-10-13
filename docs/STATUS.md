@@ -1,4 +1,33 @@
-# Acceptance status — 2026-10-09
+# Current acceptance — 2026-10-13
+
+The reliability source iteration repairs the audited observation, review,
+consumption and Web state defects. [RELIABILITY.md](RELIABILITY.md) maps R1–R13
+to implementations, refusal evidence and remaining boundaries. This is a source
+engineering acceptance; the existing user service has not been upgraded or
+restarted. Existing hook helpers load source independently; additive SQLite
+schema version 2 is observed, while the running server retains its old loaded
+code. Its collection stall remains a production issue pending authorized
+service update and loaded-build/event/spool readback. The exact blocking stack
+root cause is still UNKNOWN.
+
+Local acceptance: 105 backend cases including required real Docker execution;
+9 Web tests against an isolated real API, including control failure and retained
+detail remount; exact App/subagent/CLI fixtures; server-side pages and full-ledger
+counts; required packaging/install gates are checked on the final source. Browser
+QA uses an isolated 65-capability ledger, page 6, out-of-summary detail/version
+loading, immediate Chinese/English switching, refresh and responsive layout.
+Final Git/CI identity is read back at delivery, not inferred from this document.
+
+| Evidence layer | Current boundary |
+|---|---|
+| Local engineering mechanisms | Accepted with actual applicable tests and browser readback |
+| Existing production collection/review | Update/readback pending; previous healthy HTTP cannot prove progress |
+| Provider background admission | Explicit owner interface implemented; canonical background-job adapter pending |
+| Real Skill pilot / natural user gain | HOLD / UNKNOWN; synthetic broker integration and canaries do not replace domain truth |
+| Method recursive improvement | UNVERIFIED |
+| Cross-project/global updates | Outside this iteration's write authority |
+
+## Historical acceptance snapshot — 2026-10-09
 
 Maintenance starts at [AGENTS.md](../AGENTS.md) and the stable
 [project contract](PROJECT_CONTRACT.md). This dated status records evidence;

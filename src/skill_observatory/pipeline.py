@@ -249,6 +249,11 @@ class EvolutionPipeline:
         skill = self.store.get("skills", review["skill_id"], db=db)
         if not skill or skill.get("package_sha256") != review["skill_package_sha256"]:
             return None
+        if skill.get('version_id'):
+            version=self.store.get('capability_versions',skill['version_id'],db=db)
+            cap=self.store.get('capability_catalog',skill.get('capability_id'),db=db)
+            if not version or not cap or version['package_sha256']!=skill['package_sha256'] or cap['version_id']!=version['id']:
+                return None
         run = self.store.get("runs", review.get("run_id"), db=db)
         if not run or not any(
             attribution.get("skill_id") == review["skill_id"]

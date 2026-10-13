@@ -22,12 +22,19 @@ def _owner(store,name):
     return module,config
 
 
-def load_reviewer(store):
+def load_reviewer(store,isolated=True):
     result=_owner(store,'reviewer')
     if result is None:return None
     module,config=result
     reviewer=module.make_reviewer()
-    store.put('runtime',{'id':'reviewer','status':'configured_not_certified','owner_sha256':config['owner_sha256'],'created_at':now()})
+    store.put('runtime',{'id':'reviewer','status':'configured_not_certified','owner_sha256':config['owner_sha256'],'created_at':now(),
+        'execution_mode':'background_tool_free','required_admission_contract':'background_tool_free',
+        'capsule_schema_version':1,'isolation':'process_group_deadline'})
+    if isolated:
+        from .review_worker import IsolatedReviewer
+        seconds=getattr(reviewer,'max_seconds',120)
+        if not isinstance(seconds,(int,float)) or not 0<seconds<=300:raise ValueError('REVIEWER_DEADLINE_INVALID')
+        return IsolatedReviewer(seconds)
     return reviewer
 
 

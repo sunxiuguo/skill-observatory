@@ -16,12 +16,16 @@
     "O1": {
       "code": [
         "src/skill_observatory/runtime.py",
-        "src/skill_observatory/transcripts.py"
+        "src/skill_observatory/transcripts.py",
+        "src/skill_observatory/review_worker.py"
       ],
       "tests": [
         "tests/test_kernel.py::test_outside_scope_no_private_spool",
         "tests/test_kernel.py::test_durable_duplicate_restart_and_unknown_truth",
-        "tests/test_transcript_lifecycle.py::test_call_time_version_stays_bound_after_disk_change"
+        "tests/test_transcript_lifecycle.py::test_call_time_version_stays_bound_after_disk_change",
+        "tests/test_runtime_reliability.py::test_review_block_does_not_block_api_collector",
+        "tests/test_transcript_reliability.py::test_certified_app_child_nested_identity_and_exact_future_rejection",
+        "tests/test_runtime_reliability.py::test_session_end_uses_source_time_and_no_time_stays_envelope"
       ]
     },
     "O2": {
@@ -29,7 +33,8 @@
         "src/skill_observatory/pipeline.py",
         "src/skill_observatory/final_gate.py",
         "src/skill_observatory/installations.py",
-        "src/skill_observatory/task_broker.py"
+        "src/skill_observatory/task_broker.py",
+        "src/skill_observatory/evidence.py"
       ],
       "tests": [
         "tests/test_pipeline.py::test_unsigned_verdict_refusal_does_not_reach_installer",
@@ -38,7 +43,10 @@
         "tests/test_evaluation.py::test_final_set_consumption_survives_restart_and_new_protocol",
         "tests/test_pipeline.py::test_prepared_restart_requires_side_effect_readback",
         "tests/test_kernel.py::test_prepared_recovery_and_cas_rollback",
-        "tests/test_task_broker.py::test_candidate_cannot_expand_broker_surface"
+        "tests/test_task_broker.py::test_candidate_cannot_expand_broker_surface",
+        "tests/test_final_consumption.py::test_atomic_batch_refusal_does_not_consume_new_sample",
+        "tests/test_final_consumption.py::test_concurrent_protocols_claim_exactly_one_batch",
+        "tests/test_task_broker.py::test_actual_intersecting_final_cases_block_before_any_new_container"
       ]
     },
     "O3": {
@@ -63,7 +71,8 @@
         "tests/test_capture.py::test_failure_nonreusable_and_owner_overlap",
         "tests/test_capture.py::test_skill_creation_requires_root_reviewed_forward_cases",
         "tests/test_capture.py::test_effectful_code_and_missing_origin_cannot_be_auto_installed",
-        "tests/test_capabilities.py::test_logical_invocations_observation_dedup_attempts_and_stage_counts"
+        "tests/test_capabilities.py::test_logical_invocations_observation_dedup_attempts_and_stage_counts",
+        "tests/test_discovery_evidence.py::test_chinese_long_query_detects_frozen_version_drift"
       ]
     },
     "O5": {
@@ -71,10 +80,13 @@
         "web/src/App.jsx",
         "web/src/store.tsx",
         "web/src/Lifecycle.jsx",
-        "scripts/test_web.py"
+        "scripts/test_web.py",
+        "web/src/paging.tsx"
       ],
       "tests": [
-        "web/src/state.test.jsx"
+        "web/src/state.test.jsx",
+        "web/src/reliability.test.jsx",
+        "tests/test_paged_api.py::test_summary_pagination_filters_detail_and_revision"
       ]
     },
     "O6": {
@@ -110,6 +122,7 @@
     "docs/LIFECYCLE_HANDOFF_PROMPT.md",
     "scripts/check_project_contract.py",
     "scripts/test_web.py",
-    ".github/workflows/ci.yml"
+    ".github/workflows/ci.yml",
+    "docs/RELIABILITY.md"
   ]
 }

@@ -169,7 +169,15 @@ export interface Capabilities {
   [key: string]: unknown;
 }
 
+export interface PaginationInfo {
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export interface ObservatoryState {
+  revision?: string | number;
+  pagination?: Partial<Record<string, PaginationInfo>>;
   skills: Skill[];
   runs: Run[];
   reviews: Review[];
@@ -195,6 +203,7 @@ export interface ApiError {
   status: number;
   message: string;
   offline?: boolean;
+  aborted?: boolean;
   reason_code?: string;
 }
 

@@ -19,6 +19,8 @@ import time
 from .evaluation import DockerSandbox, Environment, EvaluationHold
 from .store import canonical, digest, now
 
+RUNNER_SHA256=digest(Path(__file__).read_bytes())
+
 
 def _model_worker(connection, owner, prompt, policy, limits):
     # New process group bounds a trusted transport and its child app-server.
@@ -253,3 +255,20 @@ class TaskBroker:
                     receipt['missing'].append('FAILED_OR_UNKNOWN_MODEL_COST_REQUIRED')
                 self.store.put('broker_attempts', receipt)
         return receipt
+
+
+class BrokerPairedRunner:
+    """Thin evaluation adapter over the existing broker; it supplies no truth."""
+    def __init__(self, broker):
+        self.broker=broker
+        self.execution_identity={'kind':'task-broker','model':broker.policy.model,'provider':broker.policy.provider,
+            'effort':broker.policy.effort,'policy_sha256':digest(canonical(broker.policy.__dict__)),
+            'snapshots_sha256':digest(canonical({k:digest(v) for k,v in broker.snapshots.items()})),
+            'runner_sha256':RUNNER_SHA256}
+
+    def run_trial(self,attempt_id,files,entrypoint,environment):
+        result=self.broker.run(attempt_id,files,entrypoint,environment)
+        artifacts={k:self.broker.store.read_artifact(v) for k,v in result.get('artifacts',{}).items()}
+        receipt={**result,'execution_identity':self.execution_identity,
+            'receipt_sha256':self.broker.store.artifact(canonical(result))}
+        return {'receipt':receipt,'artifacts':artifacts,'cost':{'money':result.get('money'),'tokens':result.get('tokens')}}

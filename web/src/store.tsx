@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import {
   establishSession,
@@ -42,6 +43,11 @@ interface PersistedUi {
   route: string | null;
 }
 
+type DisplayPrefs = Pick<Settings, "locale" | "timezone">;
+interface RefreshOptions {
+  force?: boolean;
+}
+
 interface Toast {
   id: number;
   tone: "success" | "error" | "info";
@@ -57,6 +63,7 @@ interface StoreValue {
   state: ObservatoryState | null;
   locale: Locale;
   timezone: string;
+  /** Server-acknowledged controls, with local display preferences applied only to locale/timezone. */
   settings: Settings | null;
   busy: Record<string, boolean>;
   toasts: Toast[];
@@ -65,14 +72,14 @@ interface StoreValue {
   setDrawer: (t: DrawerTarget) => void;
   uiFilters: <T>(route: string, initial: T) => [T, (v: T) => void];
   settingsDraft: Partial<Settings> | null;
-  setSettingsDraft: (d: Partial<Settings> | null) => void;
+  setSettingsDraft: (d: SetStateAction<Partial<Settings> | null>) => void;
   setLocaleImmediate: (l: Locale) => void;
   setTimezoneImmediate: (tz: string) => void;
   setPausedImmediate: (paused: boolean) => void;
   persistSettings: (next: Settings) => Promise<void>;
   doRetryJob: (id: string) => Promise<void>;
   doRollback: (id: string) => Promise<void>;
-  refresh: () => Promise<void>;
+  refresh: (options?: RefreshOptions) => Promise<void>;
   dismissToast: (id: number) => void;
 }
 
@@ -105,6 +112,23 @@ function loadUi(): PersistedUi {
   };
 }
 
+function isLocale(value: unknown): value is Locale {
+  return value === "zh-CN" || value === "en";
+}
+
+/**
+ * The local preference mirror is intentionally display-only. Runtime controls
+ * come from `/api/state`; a stale or rejected browser form must never override
+ * the server's acknowledged `paused`/`automatic_review` values.
+ */
+function loadDisplayPrefs(): DisplayPrefs | null {
+  const parsed = readJson<Partial<Settings>>(PREFS_STORAGE_KEY);
+  const next: Partial<DisplayPrefs> = {};
+  if (isLocale(parsed?.locale)) next.locale = parsed.locale;
+  if (typeof parsed?.timezone === "string") next.timezone = parsed.timezone;
+  return Object.keys(next).length ? (next as DisplayPrefs) : null;
+}
+
 function isApiError(e: unknown): ApiError {
   if (e && typeof e === "object" && "status" in e) return e as ApiError;
   return { status: 0, message: (e as Error)?.message ?? "Unknown error" };
@@ -120,11 +144,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [announcement, setAnnouncement] = useState("");
   const [ui, setUi] = useState<PersistedUi>(loadUi);
-  const [localPrefs, setLocalPrefs] = useState<Partial<Settings> | null>(
-    () => readJson<Partial<Settings>>(PREFS_STORAGE_KEY),
-  );
+  const [localPrefs, setLocalPrefs] = useState<DisplayPrefs | null>(loadDisplayPrefs);
 
   const toastId = useRef(0);
+  const refreshInFlight = useRef<Promise<void> | null>(null);
+  const refreshController = useRef<AbortController | null>(null);
+  const refreshGeneration = useRef(0);
   const pushToast = useCallback((tone: Toast["tone"], message: string, reasonCode?: string) => {
     toastId.current += 1;
     const id = toastId.current;
@@ -148,7 +173,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const setSettingsDraft = useCallback(
-    (d: React.SetStateAction<Partial<Settings> | null>) =>
+    (d: SetStateAction<Partial<Settings> | null>) =>
       setUi((u) => ({
         ...u,
         settingsDraft: typeof d === "function" ? d(u.settingsDraft) : d,
@@ -156,37 +181,69 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Locale/timezone resolution: server settings are the durable truth; a local
-  // mirror lets the UI switch instantly before the first response and offline.
+  // Locale/timezone are local display preferences and may update optimistically.
+  // Runtime controls are never sourced from this mirror.
   const serverSettings = state?.settings ?? null;
   const settings: Settings | null = serverSettings
     ? { ...serverSettings, ...(localPrefs ?? {}) }
-    : localPrefs
-      ? ({ locale: DEFAULT_LOCALE, timezone: "Asia/Shanghai", paused: false, ...localPrefs } as Settings)
-      : null;
-  const locale: Locale = settings?.locale ?? DEFAULT_LOCALE;
-  const timezone = settings?.timezone ?? "Asia/Shanghai";
+    : null;
+  const locale: Locale = localPrefs?.locale ?? serverSettings?.locale ?? DEFAULT_LOCALE;
+  const timezone = localPrefs?.timezone ?? serverSettings?.timezone ?? "Asia/Shanghai";
 
   const persistPrefsLocal = useCallback((patch: Partial<Settings>) => {
+    const displayPatch: Partial<DisplayPrefs> = {};
+    if (isLocale(patch.locale)) displayPatch.locale = patch.locale;
+    if (typeof patch.timezone === "string") displayPatch.timezone = patch.timezone;
+    if (!Object.keys(displayPatch).length) return;
+
     setLocalPrefs((prev) => {
-      const next = { ...(prev ?? {}), ...patch };
+      const next = { ...(prev ?? {}), ...displayPatch } as DisplayPrefs;
       writeJson(PREFS_STORAGE_KEY, next);
       return next;
     });
   }, []);
 
-  const refresh = useCallback(async () => {
-    try {
-      const next = await fetchState();
-      setState(next);
-      setError(null);
-      setOffline(false);
-    } catch (e) {
-      const api = isApiError(e);
-      setError(api);
-      setOffline(Boolean(api.offline) || (typeof navigator !== "undefined" && !navigator.onLine));
-      throw api;
+  const refresh = useCallback((options: RefreshOptions = {}) => {
+    // Normal calls join the current request, so polling and visibility events
+    // cannot build a queue of duplicate full-state requests. Keep this function
+    // non-async so joined callers receive the exact same Promise instance.
+    if (!options.force && refreshInFlight.current) return refreshInFlight.current;
+
+    // Mutations need a new generation after a write. Abort the older request and
+    // ignore its response even if a slow transport eventually resolves.
+    if (options.force) {
+      refreshGeneration.current += 1;
+      refreshController.current?.abort();
     }
+
+    const generation = ++refreshGeneration.current;
+    const controller = new AbortController();
+    refreshController.current = controller;
+    const request = (async () => {
+      try {
+        const next = await fetchState({ signal: controller.signal });
+        if (generation !== refreshGeneration.current) return;
+        setState(next);
+        setError(null);
+        setOffline(false);
+      } catch (e) {
+        if (generation !== refreshGeneration.current) return;
+        const api = isApiError(e);
+        if (!api.aborted) {
+          setError(api);
+          setOffline(Boolean(api.offline) || (typeof navigator !== "undefined" && !navigator.onLine));
+        }
+        throw api;
+      } finally {
+        if (generation === refreshGeneration.current) {
+          refreshController.current = null;
+          refreshInFlight.current = null;
+        }
+      }
+    })();
+
+    refreshInFlight.current = request;
+    return request;
   }, []);
 
   // Boot: session cookie/CSRF first, then state. Then poll while visible.
@@ -260,14 +317,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setBusyKey = (key: string, value: boolean) =>
     setBusy((b) => ({ ...b, [key]: value }));
 
-  const persistSettings = useCallback(
-    async (next: Settings) => {
-      persistPrefsLocal(next);
+  const saveSettingsPatch = useCallback(
+    async (patch: Partial<Settings>, options: { clearDraft?: boolean } = {}) => {
       setBusyKey("settings", true);
       try {
-        await apiSaveSettings(next);
-        await refresh();
-        setSettingsDraft(null);
+        await apiSaveSettings(patch as Settings);
+        // Force a new generation instead of joining an older in-flight GET.
+        await refresh({ force: true });
+        if (options.clearDraft) setSettingsDraft(null);
         pushToast("success", "settings-saved");
         setAnnouncement(locale === "zh-CN" ? "设置已保存" : "Settings saved");
       } catch (e) {
@@ -277,42 +334,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setBusyKey("settings", false);
       }
     },
-    [locale, persistPrefsLocal, pushToast, refresh, setSettingsDraft],
+    [locale, pushToast, refresh, setSettingsDraft],
   );
 
-  const setLocal = useCallback(
-    (patch: Partial<Settings>) => {
-      // Optimistic, local-first; flushed to server with persistSettings.
-      persistPrefsLocal(patch);
-      setSettingsDraft((prev) => ({ ...(prev ?? {}), ...patch }));
-      return { ...(settings ?? ({ locale: DEFAULT_LOCALE, timezone: "Asia/Shanghai", paused: false } as Settings)), ...patch };
-    },
-    [persistPrefsLocal, setSettingsDraft, settings],
+  const persistSettings = useCallback(
+    async (next: Settings) => saveSettingsPatch(next, { clearDraft: true }),
+    [saveSettingsPatch],
   );
 
   const setLocaleImmediate = useCallback(
     (l: Locale) => {
       persistPrefsLocal({ locale: l });
-      // Locale is independent of the unsaved form. Never clear or submit it.
-      void apiSaveSettings({ locale: l } as Settings).then(refresh).catch((e) => {
-        pushToast("error", "settings-save-failed", isApiError(e).reason_code);
-      });
+      // Locale is independent of the unsaved control form. Save only this field.
+      void saveSettingsPatch({ locale: l });
     },
-    [persistPrefsLocal, refresh, pushToast],
+    [persistPrefsLocal, saveSettingsPatch],
   );
   const setTimezoneImmediate = useCallback(
     (tz: string) => {
-      const merged = setLocal({ timezone: tz });
-      void persistSettings(merged);
+      persistPrefsLocal({ timezone: tz });
+      void saveSettingsPatch({ timezone: tz });
     },
-    [persistSettings, setLocal],
+    [persistPrefsLocal, saveSettingsPatch],
   );
   const setPausedImmediate = useCallback(
     (paused: boolean) => {
-      const merged = setLocal({ paused });
-      void persistSettings(merged);
+      const base = settings ?? ({ locale, timezone, paused: false } as Settings);
+      const next = { ...base, ...(ui.settingsDraft ?? {}), paused };
+      // Keep the user's edit visible as an independent draft while the request
+      // is pending; `settings.paused` remains the server-acknowledged value.
+      setSettingsDraft((prev) => ({ ...(prev ?? {}), paused }));
+      void persistSettings(next);
     },
-    [persistSettings, setLocal],
+    [locale, persistSettings, settings, setSettingsDraft, timezone, ui.settingsDraft],
   );
 
   const doRetryJob = useCallback(
@@ -320,7 +374,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBusyKey(`retry:${id}`, true);
       try {
         await apiRetryJob(id);
-        await refresh();
+        await refresh({ force: true });
         pushToast("success", locale === "zh-CN" ? "任务已恢复" : "Job resumed");
         setAnnouncement(locale === "zh-CN" ? `任务 ${id} 已恢复` : `Job ${id} resumed`);
       } catch (e) {
@@ -338,7 +392,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBusyKey(`rollback:${id}`, true);
       try {
         await apiRollback(id);
-        await refresh();
+        await refresh({ force: true });
         pushToast("success", locale === "zh-CN" ? "回滚已开始" : "Rollback started");
         setAnnouncement(locale === "zh-CN" ? `安装 ${id} 回滚已开始` : `Rollback started for ${id}`);
       } catch (e) {

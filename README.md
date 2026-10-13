@@ -70,10 +70,18 @@ uv run skillobs observe-session /absolute/selected-session.jsonl \
   --session-id ACTUAL_SESSION_ID --source codex-desktop
 ```
 
-The versioned transcript adapter currently supports the Codex 0.160 family and the verified 0.162.0-alpha.2 shape,
+The versioned transcript adapter supports certified 0.160.0/0.160.1 and
+0.162.0-alpha.2 fixtures, plus the exact 0.162.0-alpha.17.2 Desktop/subagent
+metadata shape. Unknown versions or incompatible source/schema combinations stay HOLD. It
 checks session/scope/cursor identity, and uses the same runtime/spool.
 Exact Skill bytes observed in native tool output can support `verified_read`;
 mentioning/discovering a Skill cannot establish execution.
+
+Collection, review and evolution have independent worker lifecycles. Configured
+reviews run under a process-group deadline; a lost dispatched attempt requires
+readback. Budget waits before dispatch retain a durable `eligible_at` and recover
+without counting a model attempt. See [reliability acceptance](docs/RELIABILITY.md)
+for the engineering results and remaining production/domain boundaries.
 
 ## Capture and reuse accepted workflows
 

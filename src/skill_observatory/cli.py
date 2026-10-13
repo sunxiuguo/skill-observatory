@@ -67,6 +67,8 @@ def main():
     p=sub.add_parser('discover');p.add_argument('--query',default='');p.add_argument('--cwd',required=True)
     p=sub.add_parser('artifact-import');p.add_argument('file')
     p=sub.add_parser('usage-import');p.add_argument('file')
+    p=sub.add_parser('review-evidence-import');p.add_argument('file')
+    p=sub.add_parser('review-reconcile');p.add_argument('id');p.add_argument('--readback',required=True)
     p=sub.add_parser('capture');p.add_argument('--spec',required=True);p.add_argument('--auto',action='store_true')
     for command in ('capture-validate','capture-activate'):
         p=sub.add_parser(command);p.add_argument('id')
@@ -78,6 +80,7 @@ def main():
         if c=='install-hooks':p.add_argument('--scope',help='Authorized observation root; defaults to the hook project')
     p=sub.add_parser('serve');p.add_argument('--port',type=int,default=8765);p.add_argument('--web-root')
     p=sub.add_parser('observe-session');p.add_argument('path');p.add_argument('--session-id',required=True);p.add_argument('--source',choices=['codex-desktop','codex-cli','codex-subagent'],required=True)
+    p=sub.add_parser('relocate-session');p.add_argument('path');p.add_argument('--old-path',required=True)
     for c in ['service-install','service-start','service-stop','service-uninstall','service-status']:
         p=sub.add_parser(c)
         if c=='service-install':p.add_argument('--port',type=int,default=8765);p.add_argument('--web-root')
@@ -93,6 +96,12 @@ def main():
             spool(s,json.loads(raw));print('{}');return
         if args.command=='doctor':result=doctor(s)
         elif args.command=='status':result=state(s)
+        elif args.command=='review-evidence-import':
+            from .evidence import attach_evidence
+            result=attach_evidence(s,json.loads(Path(args.file).read_text()))
+        elif args.command=='review-reconcile':
+            from .reviewer import reconcile_attempt
+            result=reconcile_attempt(s,args.id,json.loads(Path(args.readback).read_text()))
         elif args.command=='register':result=register(s,args.path,args.owner,license=args.license)
         elif args.command=='capability-register':
             from .capabilities import register_capability
@@ -135,6 +144,9 @@ def main():
         elif args.command=='observe-session':
             from .transcripts import observe_session
             result=observe_session(s,args.path,args.session_id,args.source)
+        elif args.command=='relocate-session':
+            from .transcripts import relocate_archived_transcript
+            result=relocate_archived_transcript(s,args.path,old_path=args.old_path)
             s.put('selected_sessions',{'id':'selected_'+digest(str(Path(args.path).resolve()).encode())[:24],'path':str(Path(args.path).resolve()),'session_id':args.session_id,'source':args.source})
         elif args.command.startswith('service-'):
             from .service import service

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import time
+from datetime import datetime, timezone
 from .store import Store, atomic_write, canonical, digest, now
 
 EVENTS = {"SessionStart","UserPromptSubmit","PreToolUse","PostToolUse","Stop","SessionEnd","SubagentStart","SubagentStop","Interrupt"}
@@ -47,7 +48,8 @@ def register(store, path, owner, source="user-owned", license=None):
     from .capabilities import register_capability
     roots=store.settings().get('scopes',[])
     if roots:
-        register_capability(store,p,owner,kind='skill',scope=roots[0])
+        cap=register_capability(store,p,owner,kind='skill',scope=roots[0])
+        s=store.get('skills',id)
     return s
 
 
@@ -60,8 +62,19 @@ def spool(store, payload, source="codex-hook"):
     if not any(cwd==s or s in cwd.parents for s in scopes): return {"status":"excluded","reason_code":"OUTSIDE_SCOPE"}
     origin=payload.get("origin","user_run")
     if origin not in ORIGINS: raise ValueError("INVALID_ORIGIN")
-    body={k:payload.get(k) for k in ("session_id","turn_id","agent_id","parent_session_id","tool_use_id","tool_name","transcript_path") if payload.get(k) is not None}
+    body={k:payload.get(k) for k in ("session_id","turn_id","agent_id","parent_session_id","root_session_id","tool_use_id","tool_name","transcript_path") if payload.get(k) is not None}
     body.update(event=event,cwd=str(cwd),source=source,origin=origin)
+    body['execution_session_id']=payload.get('execution_session_id') or payload.get('agent_id') or payload.get('session_id')
+    if payload.get('agent_id'):
+        body['parent_session_id']=payload.get('parent_session_id') or (payload.get('session_id') if payload.get('session_id')!=payload.get('agent_id') else None)
+    stamp=payload.get('occurred_at',payload.get('timestamp'))
+    if stamp:
+        try:
+            parsed=datetime.fromisoformat(stamp.replace('Z','+00:00'))
+            if parsed.tzinfo:body['occurred_at']=parsed.astimezone(timezone.utc).isoformat()
+        except (ValueError,TypeError,AttributeError):pass
+    if type(payload.get('source_sequence')) is int and payload['source_sequence']>=0:
+        body['source_sequence']=payload['source_sequence']
     # Persist minimum metadata, not prompt, command or output. Bind original redacted
     # event hash for collision diagnosis; identities provided upstream win.
     body['input_sha256']=digest(canonical(redact(payload)))
@@ -106,60 +119,124 @@ def ingest(store):
                         count+=1
                         p.unlink()
                         continue
-                    run_id='run_'+digest(canonical([e.get('session_id'),e.get('turn_id') or 'turn_unknown',e.get('agent_id')]))[:32]
-                    # SessionEnd has no turn_id: supplement the last observed run.
+                    execution=e.get('execution_session_id',e.get('agent_id') or e.get('session_id'))
+                    run_id='run_'+digest(canonical([execution,e.get('turn_id') or 'turn_unknown',e.get('agent_id')]))[:32]
+                    # Persist the terminal session envelope; insertion order is not chronology.
                     if e['event']=='SessionEnd' and not e.get('turn_id'):
-                        rows=db.execute("SELECT data FROM entities WHERE kind='runs' ORDER BY rowid DESC").fetchall()
-                        recent=next((json.loads(x[0]) for x in rows if json.loads(x[0]).get('session_id')==e.get('session_id') and json.loads(x[0]).get('agent_id')==e.get('agent_id')),None)
-                        if recent:run_id=recent['id']
-                    r=store.get('runs',run_id,db) or {"id":run_id,"session_id":e.get('session_id'),"turn_id":e.get('turn_id'),"agent_id":e.get('agent_id'),"origin":e['origin'],"created_at":e['created_at'],"event_ids":[],"status":"evidence_pending","outcome":"unverified","attributions":[],"missing":[],"cwd":e.get("cwd")}
-                    r.setdefault('sources',[])
-                    if e['source'] not in r['sources']:r['sources'].append(e['source'])
-                    r['event_ids'].append(e['id']); r['last_event']=e['event'];r['updated_at']=e['created_at']
-                    for a in e.get('attributions',[]):
-                        if a not in r['attributions']: r['attributions'].append(a)
-                    if not e.get('turn_id'): r['missing']=list(set(r['missing']+['UPSTREAM_TURN_ID_MISSING']))
-                    if e['event']=='Interrupt': r['outcome']='partial'
-                    if e['event'] in TERMINAL:
-                        r['status']='ready';jid='job_'+run_id
-                        db.execute("INSERT OR IGNORE INTO jobs(id,run_id,status,created_at) VALUES(?,?,'queued',?)",(jid,run_id,now()))
-                        # A later SessionEnd must not create a second review or overwrite reviewed.
-                        prior=store.get('reviews','rv_'+run_id,db)
-                        if prior:r['status']=prior['status']
-                    store.put('runs',r,db)
+                        store.put('session_envelopes',{'id':e['id'],'execution_session_id':execution,'agent_id':e.get('agent_id'),
+                            'event_id':e['id'],'occurred_at':e.get('occurred_at'),'source':e['source'],'status':'terminal_turn_unknown',
+                            'reason_code':'TRUSTED_TURN_ORDER_REQUIRED','created_at':e['created_at']},db)
+                    if not (e['event']=='SessionEnd' and not e.get('turn_id')):
+                        r=store.get('runs',run_id,db) or {"id":run_id,"session_id":execution,"execution_session_id":execution,"parent_session_id":e.get('parent_session_id'),"turn_id":e.get('turn_id'),"agent_id":e.get('agent_id'),"origin":e['origin'],"created_at":e['created_at'],"event_ids":[],"status":"evidence_pending","outcome":"unverified","attributions":[],"missing":[],"cwd":e.get("cwd")}
+                        r.setdefault('sources',[])
+                        if e['source'] not in r['sources']:r['sources'].append(e['source'])
+                        if e['source']=='codex-subagent' and e.get('parent_session_id'):
+                            r['parent_session_id']=e['parent_session_id'];r['root_session_id']=e.get('root_session_id')
+                        r['event_ids'].append(e['id'])
+                        event_time=e.get('occurred_at')
+                        if event_time and (not r.get('last_source_at') or event_time>=r['last_source_at']):
+                            r['last_event']=e['event'];r['last_source_at']=event_time
+                        elif not r.get('last_event') or e['event'] in TERMINAL:r['last_event']=e['event']
+                        if event_time:r['first_source_at']=min(event_time,r.get('first_source_at',event_time))
+                        r['updated_at']=max(e['created_at'],r.get('updated_at',e['created_at']))
+                        for a in e.get('attributions',[]):
+                            if a not in r['attributions']: r['attributions'].append(a)
+                        if not e.get('turn_id'): r['missing']=list(set(r['missing']+['UPSTREAM_TURN_ID_MISSING']))
+                        if e['event']=='Interrupt': r['outcome']='partial'
+                        if e['event'] in TERMINAL:
+                            r['status']='ready';r['terminal']=True;jid='job_'+run_id
+                            db.execute("INSERT OR IGNORE INTO jobs(id,run_id,status,created_at) VALUES(?,?,'queued',?)",(jid,run_id,now()))
+                            # A later SessionEnd must not create a second review or overwrite reviewed.
+                            prior=store.get('reviews','rv_'+run_id,db)
+                            if prior:r['status']=prior['status']
+                        store.put('runs',r,db)
                     count+=1
             if e.get('source')=='codex-hook' and e.get('transcript_path'):
                 from .transcripts import track_hook_session
-                try:track_hook_session(store,e)
-                except (ValueError,OSError,KeyError) as ex:store.put('adapter_errors',{'id':e['id']+'_transcript','reason_code':str(ex),'created_at':now()})
+                cause_id='adapter_'+digest(canonical([e.get('execution_session_id'),e.get('transcript_path')]))[:32]
+                error=store.get('adapter_errors',cause_id) or {}
+                if error.get('eligible_at',0)<=time.time():
+                    try:track_hook_session(store,e)
+                    except (ValueError,OSError,KeyError) as ex:
+                        reason=str(ex) if re.fullmatch(r'[A-Z0-9_:-]{1,160}',str(ex)) else type(ex).__name__
+                        store.put('adapter_errors',{'id':cause_id,'reason_code':reason,'count':error.get('count',0)+1,
+                            'first_seen_at':error.get('first_seen_at',now()),'created_at':now(),'eligible_at':time.time()+300,
+                            'execution_session_id':e.get('execution_session_id')})
             # Idempotent usage ingress after an interrupted event commit.
             from .capabilities import record_usage
             for observation in e.get('capability_observations',[]):
                 if e.get('session_id') and e.get('turn_id') and e.get('tool_use_id'):
                     try:
-                        record_usage(store,{**observation,'session_id':e['session_id'],'turn_id':e['turn_id'],
+                        record_usage(store,{**observation,'session_id':e.get('execution_session_id',e.get('agent_id') or e['session_id']),'turn_id':e['turn_id'],
                             'cwd':e['cwd'],'invocation_id':e['tool_use_id'],'tool_use_id':e['tool_use_id'],
                             'source':e['source'],'event_id':e['id']+'_'+observation['capability_id']+'_'+observation['version_id']+'_'+observation['stage'],
                             'origin':e['origin'],'agent_id':e.get('agent_id'),'evidence_sha256':store.artifact(canonical(e))})
                     except ValueError as ex:
                         store.put('adapter_errors',{'id':e['id']+'_'+observation['capability_id'],'reason_code':str(ex),'created_at':now()})
             p.unlink()
+            if count and count%100==0:progress(store,'daemon','ingest',last_committed_event=e['id'])
         except Exception as ex:
             atomic_write(store.root/'quarantine'/p.name,canonical({"reason_code":str(ex),"sha256":digest(p.read_bytes())}))
             p.rename(store.root/'quarantine'/('raw-'+p.name))
+    reconcile_session_ends(store)
     return count
+
+
+def reconcile_session_ends(store):
+    """Rebuild late terminal binding from trustworthy time, never hash/rowid order."""
+    with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        runs=[json.loads(x[0]) for x in db.execute("SELECT data FROM entities WHERE kind='runs'")]
+        ends=[json.loads(x[0]) for x in db.execute("SELECT data FROM entities WHERE kind='session_envelopes'")]
+        for end in ends:
+            if not end.get('occurred_at'):continue
+            eligible=[r for r in runs if r.get('execution_session_id',r.get('session_id'))==end['execution_session_id']
+                      and r.get('agent_id')==end.get('agent_id') and r.get('first_source_at')
+                      and r['first_source_at']<=end['occurred_at']]
+            eligible.sort(key=lambda r:r['first_source_at'],reverse=True)
+            if not eligible or (len(eligible)>1 and eligible[0]['first_source_at']==eligible[1]['first_source_at']):continue
+            r=eligible[0]
+            # A newer turn may arrive after the terminal envelope. Move the binding.
+            prior=end.get('run_id')
+            if prior and prior!=r['id']:
+                old=next((x for x in runs if x['id']==prior),None)
+                if old and end['event_id'] in old['event_ids']:
+                    old['event_ids'].remove(end['event_id'])
+                    other=[]
+                    for eid in old['event_ids']:
+                        row=db.execute('SELECT data FROM events WHERE id=?',(eid,)).fetchone()
+                        if row:other.append(json.loads(row[0]))
+                    if not any(e['event'] in TERMINAL for e in other):
+                        old['terminal']=False
+                        if old.get('status')=='ready':old['status']='evidence_pending'
+                        last=max(other,key=lambda e:e.get('occurred_at',''),default={})
+                        old['last_event']=last.get('event');old['last_source_at']=last.get('occurred_at')
+                    store.put('runs',old,db)
+            if end['event_id'] not in r['event_ids']:r['event_ids'].append(end['event_id'])
+            r['terminal']=True
+            if r.get('status')=='evidence_pending':r['status']='ready'
+            if end['occurred_at']>=r.get('last_source_at',''):
+                r['last_event']='SessionEnd';r['last_source_at']=end['occurred_at']
+            store.put('runs',r,db)
+            end.update(run_id=r['id'],status='bound',reason_code=None);store.put('session_envelopes',end,db)
+            # SessionEnd is a coverage envelope, not a second semantic dispatch.
+            # Turn terminal hooks/transcript events own review enqueueing.
 
 
 def process_one(store, reviewer=None):
     if store.settings().get('paused') or not store.settings().get('automatic_review'): return None
-    job=store.lease()
+    job=store.lease(seconds=getattr(reviewer,'max_seconds',120)+60)
     if not job:return None
     r=store.get('runs',job['run_id'])
     if reviewer:
         try:return reviewer.review(store,r)
         except Exception as ex:
-            with store.connect() as db:db.execute("UPDATE jobs SET status='hold',reason_code=?,lease_until=0 WHERE id=?",(str(ex),job['id']))
-            store.put('review_attempts',{'id':'failed_'+job['id']+'_'+str(job['attempts']),'run_id':r['id'],'status':'hold','reason_code':str(ex),'money':None,'tokens':None,'created_at':now()})
+            from .reviewer import ReviewDeferred
+            attempts=[a for a in store.list('review_attempts') if a.get('run_id')==r['id'] and a.get('admission_sha256')]
+            deferred=isinstance(ex,ReviewDeferred) and not attempts
+            reason=str(ex) if re.fullmatch(r'[A-Z0-9_:-]{1,160}',str(ex)) else type(ex).__name__
+            with store.connect() as db:db.execute("UPDATE jobs SET status=?,reason_code=?,lease_until=0,eligible_at=? WHERE id=?",('deferred' if deferred else 'hold',reason,ex.eligible_at if deferred else 0,job['id']))
+            # Pre-dispatch rejection is a job state, not a consumed model attempt.
             return None
     # Deterministic evidence triage is explicitly not a model semantic review.
     # A schema-valid HOLD preserves interrupted/missing evidence without fabricating truth.
@@ -192,19 +269,52 @@ def accept_review(store, receipt, reviewer):
     return receipt
 
 
-def tick(store,reviewer=None,pipeline=None):
+# Identity is captured when this runtime module loads, not from later disk bytes.
+BUILD_IDENTITY=digest(Path(__file__).read_bytes())
+
+
+def progress(store,lane,phase,**fields):
+    stamp=time.time();old=store.get('runtime',lane) or {}
+    return store.put('runtime',{'id':lane,'status':'running','pid':os.getpid(),'build_sha256':BUILD_IDENTITY,
+        'phase':phase,'phase_started_at':old.get('phase_started_at',stamp) if old.get('phase')==phase else stamp,
+        'last_progress_at':stamp,'heartbeat':stamp,'created_at':old.get('created_at',now()),**fields})
+
+
+def collect(store):
     from .transcripts import observe_session
+    progress(store,'daemon','transcripts')
     for selected in store.list('selected_sessions'):
-        if selected.get('closed'):continue
-        try:observe_session(store,selected['path'],selected['session_id'],selected['source'])
-        except Exception as ex:store.put('adapter_errors',{'id':selected['id'],'reason_code':str(ex),'created_at':now()})
-    n=ingest(store); review=process_one(store,reviewer)
+        if selected.get('closed') or selected.get('eligible_at',0)>time.time():continue
+        progress(store,'daemon','transcripts',selected_session_id=selected['id'])
+        try:
+            observe_session(store,selected['path'],selected['session_id'],selected['source'])
+        except Exception as ex:
+            # One cause/session/version record, bounded retry; not one error per tick.
+            old=store.get('adapter_errors',selected['id']) or {}
+            store.put('adapter_errors',{'id':selected['id'],'reason_code':str(ex)[:160],
+                'count':old.get('count',0)+1,'first_seen_at':old.get('first_seen_at',now()),'created_at':now()})
+            selected['eligible_at']=time.time()+300
+            store.put('selected_sessions',selected)
+    progress(store,'daemon','ingest')
+    n=ingest(store)
+    spool_files=list((store.root/'spool').glob('*.json'))
+    progress(store,'daemon','idle',ingested=n,spool_count=len(spool_files),
+             spool_oldest_age=max((time.time()-p.stat().st_mtime for p in spool_files if p.exists()),default=0))
+    return n
+
+
+def tick(store,reviewer=None,pipeline=None):
+    n=collect(store)
+    progress(store,'review_worker','review',deadline_at=time.time()+getattr(reviewer,'max_seconds',120)+50)
+    review=process_one(store,reviewer)
+    progress(store,'review_worker','idle')
     if pipeline is None:
         from .pipeline import EvolutionPipeline
         pipeline=EvolutionPipeline(store)
+    progress(store,'evolution_worker','evolution')
     evolution=pipeline.tick()
-    store.put('runtime',{"id":"daemon","status":"running","created_at":now(),"pid":os.getpid(),"heartbeat":time.time()})
-    return {"ingested":n,"processed":bool(review),"evolution_processed":bool(evolution)}
+    progress(store,'evolution_worker','idle')
+    return {'ingested':n,'processed':bool(review),'evolution_processed':bool(evolution)}
 
 
 def state(store):
@@ -225,6 +335,7 @@ def state(store):
     d['jobs']=store.jobs();d['settings']=store.settings()
     reviewed=sum(x['status']=='reviewed' for x in d['reviews'])
     daemon=store.get('runtime','daemon') or {}
-    d['metrics']={"observed_runs":len(d['runs']),"reviewed_runs":reviewed,"triaged_runs":sum(x['status']=='triaged' for x in d['reviews']),"global_coverage":None,"coverage_reason":"GLOBAL_DENOMINATOR_UNKNOWN","queued_jobs":sum(x['status']=='queued' for x in d['jobs']),"daemon_running":time.time()-daemon.get('heartbeat',0)<10,"window_start":min((x['created_at'] for x in d['runs']),default=None),"window_end":now()}
+    d['metrics']={"observed_runs":len(d['runs']),"reviewed_runs":reviewed,"triaged_runs":sum(x['status']=='triaged' for x in d['reviews']),"global_coverage":None,"coverage_reason":"GLOBAL_DENOMINATOR_UNKNOWN","queued_jobs":sum(x['status']=='queued' for x in d['jobs']),"daemon_running":time.time()-daemon.get('heartbeat',0)<30,"window_start":min((x['created_at'] for x in d['runs']),default=None),"window_end":now()}
+    d['runtime']=store.list('runtime');d['revision']=store.revision()
     d['capabilities']={"semantic_review":(store.get('runtime','reviewer') or {}).get('status','unconfigured'),"strong_sandbox":"requires_current_environment_receipt","promotion":"requires_frozen_independent_final","hook_trust":"native_review_required","recursive_gain":"UNVERIFIED"}
     return d

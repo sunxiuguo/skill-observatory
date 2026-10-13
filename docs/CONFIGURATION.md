@@ -27,7 +27,11 @@ isolated provider configuration, no inherited project instructions or MCP
 credentials, disabled execution/search/delegation surfaces, and read-only sandbox.
 The owner authenticates through protected storage and enforces quota. The
 admission receipt must have `ok=true`, `maximum_verified_effort` equal to the
-chosen effort and `redacted_evidence_allowed=true`. These values are decisions
+chosen effort, `execution_mode="background_tool_free"`,
+`tool_free_context_verified=true`, `redacted_evidence_allowed=true` and
+`evidence_capsule_versions=[1]`. A Native-parent subagent certificate does not
+certify a background review job. The canonical Provider owner supplies this
+contract; this project neither fabricates a parent ID nor copies its certification. These values are decisions
 of a trusted owner backed by current evidence, never user-controlled model output.
 
 No example credentials are included. No default external provider is selected.
@@ -105,5 +109,43 @@ These receipts do not include independent domain grades or certify a model owner
 
 Actual-container tests use a synthetic owner for IPC, denials, artifacts,
 deadline termination, usage gaps and restart-safe replay refusal. Live model
-certification and integration with paired evaluation/domain truth remain pending.
+certification and real domain truth remain pending. `BrokerPairedRunner` now
+connects the existing broker to paired evaluation, with its policy, snapshots,
+entrypoint and runner build identity frozen in the protocol. Actual-container
+synthetic integration proves this interface only.
 The default service does not automatically enable this adapter.
+
+## Selected factual review input and recovery
+
+Index-only events fail deterministic preflight before model admission. Trusted
+local `skillobs review-evidence-import FILE` attaches an at-most-12-KB capsule
+with exactly `run_id`, `goal`, `success_criteria`, `owner`, `version_id`, `result`,
+`steps` and `receipt_sha256`. Goals/criteria are limited to 1,600 characters each;
+up to 24 step facts are limited to 320 characters and bind actual event IDs.
+`result` contains only status/reason/exit code. Owner/version must match an actual
+verified-read invocation in the same execution and turn. The receipt stays local;
+no entire transcript, arbitrary tool output or raw prompt is sent. Drift, secrets,
+missing diagnostic facts or missing capsule-specific data authority prevents
+dispatch. Factual text remains untrusted data and cannot grant execution rights.
+
+Configured reviewers run in a process group with a wall deadline. Prepared,
+thread, turn, usage, output and terminal stages update one attempt. Unknown
+monetary cost stays null. Daily budget rejection before dispatch is deferred
+until the next UTC budget day; explicit owner-confirmed transient admission
+rejection can defer with bounded backoff. A dispatched or ambiguous attempt
+never automatically retries. `skillobs review-reconcile ATTEMPT --readback FILE`
+accepts trusted-owner terminal readback for that exact thread/turn and updates
+the same attempt without a model request. Identity or evidence drift refuses it.
+
+`skillobs relocate-session NEW_PATH --old-path SELECTED_PATH` moves an explicitly
+selected transcript pointer after exact identity and prefix checks, in one CAS
+transaction. It preserves the cursor and observes only appended bytes. It does
+not enumerate or backfill archived history; missing pointers retain a bounded
+error cause and wait for an explicit owner locator.
+
+Final samples consume both immutable input and evidence identities in one atomic
+batch before execution. Rename, intersection, supersets, label edits and another
+protocol cannot reopen them. Legacy consumed sets retain their barrier; missing
+legacy protocol mapping remains HOLD. The protocol freezes the entrypoint and
+loaded runner identity. Missing independent domain/cost receipts still prevents
+promotion, including for the now-connected broker runner.
