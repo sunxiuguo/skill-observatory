@@ -91,6 +91,21 @@ def fixture_proposer(include_costs=True):
     return proposer, calls
 
 
+def test_readonly_readiness_explains_duplicate_authority_without_reopening(tmp_path):
+    from skill_observatory.proactive import audit
+    import time
+    store = Store(tmp_path / 'state')
+    case = add_case(tmp_path, store, 'readiness')
+    grant = store.list('authority_grants')[0]
+    store.put('authority_grants', {**grant, 'id': 'duplicate-authority'})
+    before = store.revision()
+    signal = audit(store, time.time())
+    assert signal['candidate_readiness'] == [{'review_id': case['review']['id'], 'ready': False,
+        'reason_code': 'OWNER_AUTHORITY_NOT_UNIQUE_OR_VALID'}]
+    assert store.revision() == before and not store.list('experiments')
+    assert EvolutionPipeline(store).tick() is None
+
+
 def final_gate_evaluator(store):
     """Trusted fixture adapter that compiles a deliberately synthetic gate."""
 

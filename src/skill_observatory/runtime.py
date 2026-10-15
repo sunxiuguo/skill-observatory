@@ -338,7 +338,13 @@ def collect(store):
     selected_batch=(sessions[start:]+sessions[:start])[:8]
     store._collect_cursor=start+len(selected_batch)
     for selected in selected_batch:
-        if selected.get('closed') or selected.get('eligible_at',0)>time.time():continue
+        if selected.get('eligible_at',0)>time.time():continue
+        if selected.get('closed'):
+            cursor=store.get('cursors','cursor_'+digest(str(Path(selected['path']).resolve()).encode())[:24]) or {}
+            try:
+                if Path(selected['path']).stat().st_size==cursor.get('offset'):continue
+            except OSError:
+                pass  # The normal adapter error/backoff below owns missing paths.
         progress(store,'daemon','transcripts',selected_session_id=selected['id'])
         try:
             observe_session(store,selected['path'],selected['session_id'],selected['source'])

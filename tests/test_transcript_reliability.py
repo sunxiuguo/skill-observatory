@@ -70,3 +70,22 @@ def test_aggregated_collector_error_backoff(tmp_path):
  collect(s);collect(s)
  assert len(s.list('adapter_errors'))==1 and s.list('adapter_errors')[0]['count']==1
  assert s.list('selected_sessions')[0]['eligible_at']>0
+
+
+def test_closed_session_drains_late_tail_once_and_attachment_prefix_is_exact(tmp_path):
+ from skill_observatory.runtime import collect
+ from skill_observatory.store import digest
+ s,p,m=setup(tmp_path)
+ # A large attachment with a partial trailing record stays bounded and hashes
+ # precisely the complete prefix, including across chunk boundaries.
+ with p.open('a') as f:f.write(' '*1100000+'\n'+ '{"type":"event_msg","payload":')
+ initial=p.read_bytes();selected=track_hook_session(s,dict(event='SessionStart',session_id='parent',transcript_path=str(p)))
+ cursor=s.list('cursors')[0];complete=initial[:initial.rfind(b'\n')+1]
+ assert cursor['offset']==len(complete) and cursor['prefix_sha256']==digest(complete)
+ # Complete the record after attachment, then close before collection resumes.
+ with p.open('a') as f:f.write('{"type":"task_complete","turn_id":"t"}}\n')
+ track_hook_session(s,dict(event='SessionEnd',session_id='parent',transcript_path=str(p)))
+ assert s.get('selected_sessions',selected['id'])['closed']
+ for _ in range(3):collect(s)
+ assert len(s.list('runs'))==1 and len(s.jobs())==1
+ assert s.list('cursors')[0]['offset']==p.stat().st_size

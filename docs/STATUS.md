@@ -1,3 +1,57 @@
+# Proactive review and self-repair — 2026-10-15
+
+A dedicated Native recurring review was absent from the inspected local schedules.
+The owner-authorized daily heartbeat is now saved for 08:30 Asia/Shanghai and
+points only to [PROACTIVE_REVIEW.md](PROACTIVE_REVIEW.md). It reviews authorized
+recent Codex chats and this project's full observation-to-improvement chain,
+including evidence gaps, absent candidates, independent evaluation, owner apply,
+fresh activation, natural follow-up, method lineage, performance and storage.
+The root retains its selected model/effort. A persisted active schedule does not
+prove its first future trigger; that receipt remains a required follow-up.
+
+`proactive-plan` reads only index metadata and bounded transcript headers within
+configured scopes. Fingerprints, fair bounded discovery, unfinished-batch resume,
+root receipts and due follow-ups reuse the existing private ledger. Current-root
+and descendant executions are excluded, other sources remain explicitly
+unclassified/child, and no review receipt certifies natural outcomes or grants
+promotion. Missing evidence, unknown formats, index drift, changed source files
+and repeated HOLDs remain visible. Source changes at finish force immediate
+follow-up. No-change ends before additional semantic calls, though the native
+daily root wake itself still has overhead.
+
+The first real bounded audit inspected four historical sources plus the system
+item; more sources remain, so this is not full-window coverage. It found missing
+factual inputs, incomplete/taken-over child work and an unsupported historical
+format. Existing recovered noise was not turned into additional Skill rules.
+One original cause is fixed in project code: exact alpha.17.2 `codex_exec` child
+metadata is supported, with source/identity/version refusal cases retained.
+Independent review also found and led to correction of task-receipt kind naming,
+readiness diagnostics, internal-source filtering and stale-source accounting.
+Existing pipeline gates now expose read-only first-failure reasons; ambiguous
+authority and unknown/held side effects are still refused, never reopened.
+
+A collector defect skipped closed-session tails. The corrected collector drains
+those tails without reattaching historical prefixes; initial attachment hashes
+are streamed with bounded memory. Actual local service readback reduced 17
+closed pointers with unread appended bytes to 0. Package code and served static
+bytes match the dedicated immutable runtime. The active service and queue
+progress are verified separately from task improvement.
+
+Validation: 167 backend tests passed with the required real Docker runtime;
+9 real API/DOM tests passed; project-contract checks, build/archive byte audits
+and isolated immutable wheel import passed. Rollback runtime and a verified,
+losslessly compressed ledger backup remain private. Private transcripts, state,
+review receipts, machine configuration and automation identity are not distributed.
+Final source/remote/CI identities are recorded in the private delivery receipt.
+
+The new workflow actively performs authorized local repairs, including
+replacement/refactoring/deletion when supported, through original owners.
+It does not supply universal domain truth or automatically enable promotion.
+Skill task gain and natural user gain remain UNKNOWN/HOLD; this project's method
+RSI remains UNVERIFIED until accepted method lineage and independent downstream
+comparison exist. The current factual-input backlog and historical coverage gaps
+are follow-up work, not a completed self-improvement outcome.
+
 # Current acceptance — 2026-10-15 (semantic recovery)
 
 The previous closeout stopped at an execution HOLD before completing available

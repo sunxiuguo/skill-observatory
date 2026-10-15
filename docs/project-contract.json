@@ -10,14 +10,16 @@
     "docs/STATUS.md",
     "docs/CONFIGURATION.md",
     "docs/CAPABILITY_LIFECYCLE.md",
-    "docs/LIFECYCLE_HANDOFF_PROMPT.md"
+    "docs/LIFECYCLE_HANDOFF_PROMPT.md",
+    "docs/PROACTIVE_REVIEW.md"
   ],
   "objectives": {
     "O1": {
       "code": [
         "src/skill_observatory/runtime.py",
         "src/skill_observatory/transcripts.py",
-        "src/skill_observatory/review_worker.py"
+        "src/skill_observatory/review_worker.py",
+        "src/skill_observatory/proactive.py"
       ],
       "tests": [
         "tests/test_kernel.py::test_outside_scope_no_private_spool",
@@ -25,7 +27,9 @@
         "tests/test_transcript_lifecycle.py::test_call_time_version_stays_bound_after_disk_change",
         "tests/test_runtime_reliability.py::test_review_block_does_not_block_api_collector",
         "tests/test_transcript_reliability.py::test_certified_app_child_nested_identity_and_exact_future_rejection",
-        "tests/test_runtime_reliability.py::test_session_end_uses_source_time_and_no_time_stays_envelope"
+        "tests/test_runtime_reliability.py::test_session_end_uses_source_time_and_no_time_stays_envelope",
+        "tests/test_proactive.py::test_index_is_readonly_and_outside_transcript_is_never_opened",
+        "tests/test_proactive.py::test_pending_survives_restart_and_partial_receipt_never_discards_work"
       ]
     },
     "O2": {
@@ -106,7 +110,8 @@
         "src/skill_observatory/evaluation.py"
       ],
       "tests": [
-        "tests/test_evaluation.py::test_real_artifact_grading_and_synthetic_final_stays_hold"
+        "tests/test_evaluation.py::test_real_artifact_grading_and_synthetic_final_stays_hold",
+        "tests/test_proactive.py::test_changed_source_reopens_but_planning_does_not_enqueue_models"
       ]
     }
   },
@@ -123,6 +128,7 @@
     "scripts/check_project_contract.py",
     "scripts/test_web.py",
     ".github/workflows/ci.yml",
-    "docs/RELIABILITY.md"
+    "docs/RELIABILITY.md",
+    "docs/PROACTIVE_REVIEW.md"
   ]
 }

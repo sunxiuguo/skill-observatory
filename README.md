@@ -105,6 +105,13 @@ method. Existing signed final/activation/live-outcome gates remain unchanged.
 
 ## Semantic review and owner integration
 
+For unattended recent-chat review and repair of both Skills and this project,
+use the single [proactive review workflow](docs/PROACTIVE_REVIEW.md). Its
+`proactive-plan` / `proactive-finish` commands discover changed in-scope sources,
+resume unfinished batches and retain forward follow-ups in the existing ledger.
+The Native root performs evidence review and authorized repairs; planning and
+root accounting do not grant promotion authority or certify RSI gains.
+
 Without a configured reviewer, executions receive deterministic **triage HOLD**,
 not a completed semantic review. `CodexReviewer` accepts a trusted local owner
 factory and exact provider/model/maximum-effort admission function. Authentication,

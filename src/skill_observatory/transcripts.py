@@ -55,10 +55,15 @@ def _read_meta(store, path, source):
     elif version == ALPHA_17:
         # The version string alone is not a contract. Current App transcripts
         # carry both the rollout/execution id and the logical parent session.
-        if source == "codex-cli":
-            raise ValueError("TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED")
+        desktop = meta.get('originator') == DESKTOP_APP_ORIGINATOR
+        cli = meta.get('originator') == 'codex_exec'
+        spawned = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
+        if (source == 'codex-cli' and not (cli and meta.get('source') == 'exec')) \
+                or (source == 'codex-desktop' and not (desktop and not spawned)) \
+                or (source == 'codex-subagent' and not (spawned and (desktop or cli))):
+            raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
         if (
-            meta.get("originator") != DESKTOP_APP_ORIGINATOR
+            not (desktop or cli)
             or not isinstance(meta.get("session_id"), str)
             or not meta.get("session_id")
         ):
@@ -354,15 +359,22 @@ def track_hook_session(store, event):
     selected_id = "selected_" + digest(str(path).encode())[:24]
     selected = store.get("selected_sessions", selected_id)
     if not selected:
-        content = path.read_bytes()
-        offset = content.rfind(b"\n") + 1
+        # Keep the exact attachment prefix without loading a long transcript
+        # into memory. Incomplete trailing JSON remains for the adapter later.
+        running = hashlib.sha256(); prefix = running.copy(); position = 0; offset = 0
+        with path.open('rb') as f:
+            while block := f.read(1024 * 1024):
+                last = block.rfind(b'\n')
+                if last >= 0:
+                    prefix = running.copy(); prefix.update(block[:last + 1]); offset = position + last + 1
+                running.update(block); position += len(block)
         stat = path.stat()
         store.put(
             "cursors",
             {
                 "id": "cursor_" + digest(str(path).encode())[:24],
                 "offset": offset,
-                "prefix_sha256": digest(content[:offset]),
+                "prefix_sha256": prefix.hexdigest(),
                 "turn_id": event.get("turn_id"),
                 "calls": {},
                 "created_at": now(),

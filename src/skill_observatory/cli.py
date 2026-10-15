@@ -73,6 +73,8 @@ def main():
     p=sub.add_parser('artifact-import');p.add_argument('file')
     p=sub.add_parser('usage-import');p.add_argument('file')
     p=sub.add_parser('review-evidence-import');p.add_argument('file')
+    p=sub.add_parser('proactive-plan');p.add_argument('--index-db',required=True);p.add_argument('--exclude-session');p.add_argument('--days',type=int,default=7);p.add_argument('--limit',type=int,default=12)
+    p=sub.add_parser('proactive-finish');p.add_argument('--batch-id',required=True);p.add_argument('--receipt',required=True)
     for command in ('evolution-proposal-bind','evolution-evaluation-bind'):
         p=sub.add_parser(command);p.add_argument('file')
     p=sub.add_parser('review-reconcile');p.add_argument('id');p.add_argument('--readback',required=True)
@@ -134,6 +136,14 @@ def main():
             from .maintenance import compact_database
             result=compact_database(s,args.apply)
         elif args.command=='status':result=state(s)
+        elif args.command=='proactive-plan':
+            from .proactive import plan
+            root_id=args.exclude_session or os.environ.get('CODEX_THREAD_ID')
+            if not root_id:raise ValueError('PROACTIVE_ROOT_REQUIRED')
+            result=plan(s,args.index_db,exclude_session=root_id,days=args.days,limit=args.limit)
+        elif args.command=='proactive-finish':
+            from .proactive import finish
+            result=finish(s,args.batch_id,json.loads(Path(args.receipt).read_text()))
         elif args.command=='review-evidence-import':
             from .evidence import attach_evidence
             result=attach_evidence(s,json.loads(Path(args.file).read_text()))

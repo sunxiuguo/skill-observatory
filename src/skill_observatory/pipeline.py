@@ -232,21 +232,26 @@ class EvolutionPipeline:
             )
             self.store.put("experiments", stage, db=db)
 
-    def _eligible_review(self, db, review):
+    def _eligible_review(self, db, review, diagnostics=None):
+        # Optional read-only explanation uses exactly the same gates as dispatch.
+        # It does not reopen held experiments or create another eligibility owner.
+        def reject(code):
+            if diagnostics is not None: diagnostics.append(code)
+            return None
         if review.get("status") != "reviewed" or review.get("decision") != "CANDIDATE":
-            return None
+            return reject('REVIEW_NOT_CANDIDATE')
         if review.get("attribution") not in VERIFIED_ATTRIBUTIONS:
-            return None
+            return reject('VERIFIED_ATTRIBUTION_REQUIRED')
         if not review.get("skill_id") or not review.get("skill_package_sha256"):
-            return None
+            return reject('SKILL_IDENTITY_REQUIRED')
         skill = self.store.get("skills", review["skill_id"], db=db)
         if not skill or skill.get("package_sha256") != review["skill_package_sha256"]:
-            return None
+            return reject('PARENT_SKILL_DRIFT')
         if skill.get('version_id'):
             version=self.store.get('capability_versions',skill['version_id'],db=db)
             cap=self.store.get('capability_catalog',skill.get('capability_id'),db=db)
             if not version or not cap or version['package_sha256']!=skill['package_sha256'] or cap['version_id']!=version['id']:
-                return None
+                return reject('CAPABILITY_VERSION_DRIFT')
         run = self.store.get("runs", review.get("run_id"), db=db)
         if not run or not any(
             attribution.get("skill_id") == review["skill_id"]
@@ -254,25 +259,25 @@ class EvolutionPipeline:
             and attribution.get("attribution") == review["attribution"]
             for attribution in run.get("attributions", [])
         ):
-            return None
+            return reject('RUN_ATTRIBUTION_NOT_BOUND')
         try:
             from .runtime import package_manifest
 
             manifest = package_manifest(skill["path"])
             target = Path(skill["path"]) / AUTHORIZED_FILE
             if manifest != skill.get("manifest") or not target.is_file():
-                return None
+                return reject('PARENT_PACKAGE_DRIFT')
             parent = target.read_bytes()
             if (
                 len(parent) > MAX_PARENT_BYTES
                 or manifest.get("files", {}).get(AUTHORIZED_FILE) != digest(parent)
             ):
-                return None
+                return reject('PARENT_INPUT_INVALID')
         except (OSError, ValueError, KeyError):
-            return None
+            return reject('PARENT_PACKAGE_UNREADABLE')
         authority = self._matching_authority(db, review, skill, target)
         if authority is None:
-            return None
+            return reject('OWNER_AUTHORITY_NOT_UNIQUE_OR_VALID')
         return review, skill, authority, parent
 
     def _matching_authority(self, db, review, skill, target):
