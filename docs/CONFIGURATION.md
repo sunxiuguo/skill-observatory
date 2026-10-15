@@ -44,6 +44,21 @@ makes a tool-free context physically isolated. Verify actual advertised tools,
 execution denials, fresh identity and data policy before admitting an adapter.
 Unknown tool isolation blocks certification and automatic promotion.
 
+`background.ToolFreeGuard` is an optional thin transport boundary, composed by
+the same trusted provider owner. Its default rejects a nonempty tool catalog.
+With an explicitly reviewed `empty_catalog=True` profile it maps only tool
+fields to `tools=[]`/`tool_choice=none`, pins the exact model/upstream, and retains
+source/wire counts without prompts, outputs or credentials. The model input is
+unchanged. Runtime tool attempts are independently refused by `CodexReviewer`.
+Two successful warm tool-free turns, actual wire receipts and exact runtime,
+guard/profile/model/maximum-effort bindings are required before an owner supplies
+background admission. This is a different proof from a Native subagent certificate;
+it does not grant domain truth, installation or a task's data authority.
+An owner whose provider lacks native structured-output compatibility may select
+`native_output_schema=False`. The same frozen schema remains in the prompt and
+mandatory local JSON/schema/identity validation is unchanged; this only changes
+the provider transport parameter, not the acceptance gate.
+
 ## Evolution owners and independent final truth
 
 Fresh-context task receipts require an installation `applied_at` recorded after
@@ -149,3 +164,24 @@ protocol cannot reopen them. Legacy consumed sets retain their barrier; missing
 legacy protocol mapping remains HOLD. The protocol freezes the entrypoint and
 loaded runner identity. Missing independent domain/cost receipts still prevents
 promotion, including for the now-connected broker runner.
+
+## Explicit observation and diagnostic scope
+
+Observation and selected diagnostic facts are separate local grants. The trusted
+local `authorize-scope --root /absolute/project --evidence /private/owner-receipt`
+command records the current owner's source authorization; `--diagnostics` also
+enables that scope's bounded diagnostic lane. The CLI flag records existing human
+authority and does not create it. This ingress is unavailable through HTTP.
+It neither imports historical sessions nor grants installation/promotion rights.
+
+Worker health lives in small independent private files. `health` remains readable
+without opening SQLite; `/api/health` uses the normal loopback session. Failed
+database operations leave deliveries in the spool and back off instead of
+quarantining every delivery. `last_attempt_at`/heartbeat and `last_success_at`
+are different facts; a fresh attempt cannot certify successful collection.
+
+A local reviewer owner may set `execution_hold` to an uppercase reason code. The
+runtime records `semantic_integration_hold` independently of transport proof and
+defers before creating a reviewer subprocess. Transport qualification alone does
+not establish schema-review completion or domain correctness. Remove a HOLD only
+after inspecting the consumed attempts and verifying the relevant integration.

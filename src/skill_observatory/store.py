@@ -1,6 +1,8 @@
 """Private transactional state and content-addressed evidence."""
 from __future__ import annotations
 import hashlib
+import gzip
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -50,6 +52,16 @@ class Store:
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.root, 0o700)
         self.db_path = self.root / "state.sqlite3"
+        self._progress = {}
+        self._catalog_cache = {}
+        # Hook processes open this ledger frequently. Migrations belong to a
+        # schema transition, not every tool event (and not every read command).
+        with self.connect() as db:
+            version = db.execute('PRAGMA user_version').fetchone()[0]
+        if version == 3:
+            return
+        if version > 3:
+            raise ValueError('DATABASE_SCHEMA_NEWER_THAN_RUNTIME')
         with self.connect() as db:
             db.executescript("""
             PRAGMA journal_mode=WAL;
@@ -67,28 +79,35 @@ class Store:
             for table in ('entities','events','jobs','settings'):
                 for op in ('INSERT','UPDATE','DELETE'):
                     db.execute(f'CREATE TRIGGER IF NOT EXISTS revision_{table}_{op} AFTER {op} ON {table} BEGIN UPDATE ledger_revision SET value=value+1 WHERE id=1; END')
-            db.execute('PRAGMA user_version=2')
             db.execute("CREATE INDEX IF NOT EXISTS invocation_capability ON entities(kind,json_extract(data,'$.capability_id'))")
             db.execute("CREATE INDEX IF NOT EXISTS entity_run ON entities(kind,json_extract(data,'$.run_id'))")
+            db.execute("CREATE INDEX IF NOT EXISTS entity_execution ON entities(kind,COALESCE(json_extract(data,'$.execution_session_id'),json_extract(data,'$.session_id')))")
+            db.execute('CREATE INDEX IF NOT EXISTS events_created ON events(created_at,id)')
             db.execute('CREATE INDEX IF NOT EXISTS job_run ON jobs(run_id,status)')
             db.execute("INSERT OR IGNORE INTO settings VALUES(1,?)", (json.dumps({"locale":"zh-CN","timezone":"Asia/Shanghai","paused":False,"scopes":[],"automatic_review":True,"auto_promote":False}),))
+            db.execute('PRAGMA user_version=3')
         os.chmod(self.db_path, 0o600)
 
     @contextmanager
     def connect(self):
-        db = sqlite3.connect(self.db_path, timeout=30)
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA busy_timeout=30000")
-        try:
-            yield db
-            db.commit()
-        except BaseException:
-            db.rollback(); raise
-        finally: db.close()
+        # An offline recovery owns EX on this file. Readers cannot keep an old
+        # SQLite inode alive across its atomic replacement.
+        with (self.root/'database.lock').open('a') as gate:
+            fcntl.flock(gate,fcntl.LOCK_SH)
+            db = sqlite3.connect(self.db_path, timeout=30)
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA busy_timeout=30000")
+            try:
+                yield db
+                db.commit()
+            except BaseException:
+                db.rollback(); raise
+            finally: db.close()
 
     def put(self, kind, value, db=None):
+        if kind in {'skills','capability_catalog'}:self._catalog_cache.pop(kind,None)
         def write(d):
-            d.execute("INSERT INTO entities VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET data=excluded.data", (kind,value["id"],canonical(value).decode()))
+            d.execute("INSERT INTO entities VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET data=excluded.data WHERE entities.data!=excluded.data", (kind,value["id"],canonical(value).decode()))
         if db is not None: write(db)
         else:
             with self.connect() as d: write(d)
@@ -102,27 +121,57 @@ class Store:
         with self.connect() as d: return read(d)
 
     def list(self, kind):
+        if kind in {'skills','capability_catalog'}:
+            entry=self._catalog_cache.get(kind)
+            if entry and time.monotonic()-entry[0]<1:return json.loads(entry[1])
         with self.connect() as db:
-            return [json.loads(r[0]) for r in db.execute("SELECT data FROM entities WHERE kind=? ORDER BY rowid DESC",(kind,))]
+            result=[json.loads(r[0]) for r in db.execute("SELECT data FROM entities WHERE kind=? ORDER BY rowid DESC",(kind,))]
+        if kind in {'skills','capability_catalog'}:self._catalog_cache[kind]=(time.monotonic(),json.dumps(result))
+        return result
 
     def settings(self, update=None):
         with self.connect() as db:
             current=json.loads(db.execute("SELECT data FROM settings WHERE id=1").fetchone()[0])
             if update:
-                current.update(update); db.execute("UPDATE settings SET data=? WHERE id=1",(canonical(current).decode(),))
+                current.update(update); encoded=canonical(current).decode()
+                db.execute("UPDATE settings SET data=? WHERE id=1 AND data!=?",(encoded,encoded))
             return current
 
     def artifact(self, data):
         h=digest(data); p=self.root/"artifacts"/h
-        if not p.exists(): atomic_write(p,data)
-        elif digest(p.read_bytes())!=h: raise ValueError("ARTIFACT_CORRUPT")
+        if p.exists() or p.with_suffix('.gz').exists():
+            if self.read_artifact(h)!=data:raise ValueError('ARTIFACT_CORRUPT')
+        else: atomic_write(p,data)
         return h
 
     def read_artifact(self, h):
         if len(h)!=64 or any(c not in "0123456789abcdef" for c in h): raise ValueError("INVALID_ARTIFACT_ID")
-        b=(self.root/"artifacts"/h).read_bytes()
+        p=self.root/"artifacts"/h
+        if p.is_symlink() or p.with_suffix('.gz').is_symlink():raise ValueError('ARTIFACT_NOT_REGULAR')
+        try:
+            # Maintenance publishes gzip before removing raw bytes. A reader
+            # racing that unlink must retry the published representation.
+            try:b=p.read_bytes()
+            except FileNotFoundError:b=gzip.decompress(p.with_suffix('.gz').read_bytes())
+        except (OSError,EOFError) as ex:raise ValueError('ARTIFACT_CORRUPT') from ex
         if digest(b)!=h: raise ValueError("ARTIFACT_CORRUPT")
         return b
+
+    def event_data(self, data, db=None):
+        """Read hot or losslessly archived bytes without changing event identity."""
+        value=json.loads(data)
+        if '_archive_event' not in value:return value
+        def read(conn):
+            row=conn.execute('SELECT raw_sha256,data FROM archive_event_payloads WHERE id=?',(value['_archive_event'],)).fetchone()
+            if row is None:raise ValueError('ARCHIVE_EVENT_MISSING')
+            try:raw=gzip.decompress(row['data'])
+            except (OSError,EOFError) as ex:raise ValueError('ARCHIVE_EVENT_CORRUPT') from ex
+            if digest(raw)!=row['raw_sha256']:raise ValueError('ARCHIVE_EVENT_CORRUPT')
+            result=json.loads(raw)
+            if result.get('id')!=value['_archive_event']:raise ValueError('ARCHIVE_EVENT_IDENTITY_MISMATCH')
+            return result
+        if db is not None:return read(db)
+        with self.connect() as conn:return read(conn)
 
     def lease(self, seconds=120):
         with self.connect() as db:

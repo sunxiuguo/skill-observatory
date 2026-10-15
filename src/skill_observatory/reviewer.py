@@ -19,10 +19,11 @@ class ReviewDeferred(ValueError):
 
 
 class CodexReviewer:
-    def __init__(self, client_factory, admission, model, provider, effort, cwd, max_seconds=120, daily_attempt_limit=5):
+    def __init__(self, client_factory, admission, model, provider, effort, cwd, max_seconds=120, daily_attempt_limit=5,native_output_schema=True):
         self.client_factory=client_factory;self.admission=admission;self.model=model
         self.provider=provider;self.effort=effort;self.cwd=str(Path(cwd).resolve());self.max_seconds=max_seconds
         self.daily_attempt_limit=daily_attempt_limit
+        self.native_output_schema=native_output_schema
 
     def review(self,store,run):
         attempts=[x for x in store.list('review_attempts') if x.get('admission_sha256') and x.get('created_at','').startswith(now()[:10])]
@@ -70,7 +71,9 @@ class CodexReviewer:
                 tid=r['thread']['id'];save(thread_id=tid,status='thread_started')
                 if r.get('model',self.model)!=self.model:raise ValueError('MODEL_IDENTITY_DRIFT')
                 save(status='turn_start_requested')
-                turn=c.request('turn/start',{'threadId':tid,'model':self.model,'effort':self.effort,'input':[{'type':'text','text':prompt}],'outputSchema':schema})
+                params={'threadId':tid,'model':self.model,'effort':self.effort,'input':[{'type':'text','text':prompt}]}
+                if self.native_output_schema:params['outputSchema']=schema
+                turn=c.request('turn/start',params)
                 save(turn_id=turn['turn']['id'],status='streaming')
                 pending=list(c.notifications);c.notifications.clear()
                 while time.monotonic()<deadline:

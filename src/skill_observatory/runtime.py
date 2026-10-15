@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sqlite3
 import time
 from datetime import datetime, timezone
 from .store import Store, atomic_write, canonical, digest, now
@@ -79,7 +80,9 @@ def spool(store, payload, source="codex-hook"):
     # event hash for collision diagnosis; identities provided upstream win.
     body['input_sha256']=digest(canonical(redact(payload)))
     # Only path-level facts from the current event. No transcript scan or execution.
-    raw=canonical(payload).decode()
+    # Names visible in a prompt/tool catalog are not actual Skill use. Attribute
+    # path mentions only to the current tool input, never every injected entry.
+    raw=canonical(payload.get('tool_input',payload.get('tool_arguments',{}))).decode()
     for cap in store.list('capability_catalog'):
         entry=str(Path(cap['path'])/('SKILL.md' if cap['kind']=='skill' else 'command.json'))
         if entry in raw:
@@ -88,8 +91,12 @@ def spool(store, payload, source="codex-hook"):
         body['attributions']=payload['verified_attributions']
     if source in {'codex-desktop','codex-cli','codex-subagent'} and payload.get('capability_observations'):
         body.setdefault('capability_observations',[]).extend(payload['capability_observations'])
+    diagnostic=payload.get('diagnostic_fact')
+    authorized=any(cwd==Path(s).resolve() or Path(s).resolve() in cwd.parents for s in store.settings().get('diagnostic_scopes',[]))
+    if authorized and source in {'codex-desktop','codex-cli','codex-subagent'} and isinstance(diagnostic,dict):
+        if set(diagnostic)=={'status','exit_code','reason_code'} and diagnostic['status']=='failed' and type(diagnostic['exit_code']) is int and diagnostic['exit_code']!=0 and diagnostic['reason_code'] in {'CLI_ARGUMENT_MISMATCH','TOOL_TIMEOUT','TOOL_EXIT_NONZERO'}:
+            body['diagnostic_fact']=diagnostic
     for s in store.list('skills'):
-        raw=canonical(payload).decode()
         if str(Path(s['path'])/'SKILL.md') in raw:
             body.setdefault('attributions',[]).append({"skill_id":s['id'],"package_sha256":s['package_sha256'],"attribution":"inferred"})
     identity={k:body.get(k) for k in ('source','session_id','turn_id','agent_id','tool_use_id','event','input_sha256')}
@@ -99,16 +106,16 @@ def spool(store, payload, source="codex-hook"):
     return {"status":"spooled","id":body['id']}
 
 
-def ingest(store):
+def ingest(store,limit=512):
     count=0
-    for p in sorted((store.root/'spool').glob('*.json')):
+    for p in sorted((store.root/'spool').glob('*.json'))[:limit]:
         try:
             b=p.read_bytes();e=json.loads(b)
             normalized={k:v for k,v in e.items() if k!='created_at'}; h=digest(canonical(normalized))
             with store.connect() as db:
                 old=db.execute('SELECT hash,data FROM events WHERE id=?',(e['id'],)).fetchone()
                 if old and old[0]!=h:
-                    prior={k:v for k,v in json.loads(old[1]).items() if k!='created_at'}
+                    prior={k:v for k,v in store.event_data(old[1],db).items() if k!='created_at'}
                     # Older collectors omitted this derived field. Accept only an
                     # exact redelivery with the same fallback execution identity;
                     # keep the original durable bytes and reject every other drift.
@@ -119,7 +126,7 @@ def ingest(store):
                 if old:
                     # Delivery timestamps are excluded from event identity. Use the
                     # first durable bytes for downstream evidence on redelivery.
-                    e=json.loads(old[1])
+                    e=store.event_data(old[1],db)
                 if not old:
                     db.execute('INSERT INTO events VALUES(?,?,?,?)',(e['id'],h,b.decode(),e['created_at']))
                     if e['event'] in {'SubagentStart','SubagentStop'} and not e.get('agent_id'):
@@ -158,6 +165,11 @@ def ingest(store):
                             prior=store.get('reviews','rv_'+run_id,db)
                             if prior:r['status']=prior['status']
                         store.put('runs',r,db)
+                        if e.get('diagnostic_fact'):
+                            facts=store.get('run_diagnostics',run_id,db) or {'id':run_id,'run_id':run_id,'steps':[],'coverage':'typed_tool_failures_only','goal':None,'success_criteria':None,'created_at':now()}
+                            step={'event_id':e['id'],**e['diagnostic_fact']}
+                            if step not in facts['steps']:facts['steps']=(facts['steps']+[step])[-24:]
+                            store.put('run_diagnostics',facts,db)
                     count+=1
             if e.get('source')=='codex-hook' and e.get('transcript_path'):
                 from .transcripts import track_hook_session
@@ -183,10 +195,18 @@ def ingest(store):
                         store.put('adapter_errors',{'id':e['id']+'_'+observation['capability_id'],'reason_code':str(ex),'created_at':now()})
             p.unlink()
             if count and count%100==0:progress(store,'daemon','ingest',last_committed_event=e['id'])
+        except sqlite3.DatabaseError:
+            # A ledger failure says nothing about an individual delivery's
+            # validity. Preserve the spool and let the lane back off.
+            raise
+        except OSError as ex:
+            if ex.errno in {5,13,28,30}:raise
+            atomic_write(store.root/'quarantine'/p.name,canonical({"reason_code":type(ex).__name__,"sha256":digest(p.read_bytes())}))
+            p.rename(store.root/'quarantine'/('raw-'+p.name))
         except Exception as ex:
             atomic_write(store.root/'quarantine'/p.name,canonical({"reason_code":str(ex),"sha256":digest(p.read_bytes())}))
             p.rename(store.root/'quarantine'/('raw-'+p.name))
-    reconcile_session_ends(store)
+    if count:reconcile_session_ends(store)
     return count
 
 
@@ -213,7 +233,7 @@ def reconcile_session_ends(store):
                     other=[]
                     for eid in old['event_ids']:
                         row=db.execute('SELECT data FROM events WHERE id=?',(eid,)).fetchone()
-                        if row:other.append(json.loads(row[0]))
+                        if row:other.append(store.event_data(row[0],db))
                     if not any(e['event'] in TERMINAL for e in other):
                         old['terminal']=False
                         if old.get('status')=='ready':old['status']='evidence_pending'
@@ -281,17 +301,43 @@ def accept_review(store, receipt, reviewer):
 BUILD_IDENTITY=digest(Path(__file__).read_bytes())
 
 
-def progress(store,lane,phase,**fields):
-    stamp=time.time();old=store.get('runtime',lane) or {}
-    return store.put('runtime',{'id':lane,'status':'running','pid':os.getpid(),'build_sha256':BUILD_IDENTITY,
+def progress(store,lane,phase,successful=False,**fields):
+    stamp=time.time();cached=store._progress.get(lane,{})
+    old=cached.get('row') or store.get('runtime',lane) or {}
+    row={**old,'id':lane,'status':'running','pid':os.getpid(),'build_sha256':BUILD_IDENTITY,
         'phase':phase,'phase_started_at':old.get('phase_started_at',stamp) if old.get('phase')==phase else stamp,
-        'last_progress_at':stamp,'heartbeat':stamp,'created_at':old.get('created_at',now()),**fields})
+        'last_attempt_at':stamp,'last_success_at':old.get('last_success_at'),
+        'last_progress_at':old.get('last_progress_at'),'heartbeat':stamp,'created_at':old.get('created_at',now()),**fields}
+    if successful:row.update(last_success_at=stamp,last_progress_at=stamp)
+    store._progress[lane]={'row':row,'persisted_at':cached.get('persisted_at',0)}
+    # Coalesce phase churn; a live socket/attempt does not advance successful work.
+    if stamp-cached.get('persisted_at',0)>=5:
+        from .health import write_lane
+        write_lane(store,lane,**row,consecutive_failures=0 if successful else cached.get('failures',0),reason_code=None)
+        store.put('runtime',row);store._progress[lane]['persisted_at']=stamp
+    elif successful:
+        from .health import read_lane,write_lane
+        if read_lane(store.root,lane).get('status')=='failed':
+            write_lane(store,lane,**row,consecutive_failures=0,reason_code=None)
+    return row
 
 
 def collect(store):
     from .transcripts import observe_session
+    # Drain durable deliveries before following transcripts; one large appended
+    # session must not delay the entire existing spool behind a full catalog pass.
+    n=ingest(store)
+    pending=list((store.root/'spool').glob('*.json'))
+    if len(pending)>=512:
+        progress(store,'daemon','idle',ingested=n,spool_count=len(pending),backpressure='drain_before_transcript_expansion',
+            spool_oldest_age=max((time.time()-p.stat().st_mtime for p in pending if p.exists()),default=0))
+        return n
     progress(store,'daemon','transcripts')
-    for selected in store.list('selected_sessions'):
+    sessions=store.list('selected_sessions')
+    start=getattr(store,'_collect_cursor',0)%max(1,len(sessions))
+    selected_batch=(sessions[start:]+sessions[:start])[:8]
+    store._collect_cursor=start+len(selected_batch)
+    for selected in selected_batch:
         if selected.get('closed') or selected.get('eligible_at',0)>time.time():continue
         progress(store,'daemon','transcripts',selected_session_id=selected['id'])
         try:
@@ -303,8 +349,9 @@ def collect(store):
                 'count':old.get('count',0)+1,'first_seen_at':old.get('first_seen_at',now()),'created_at':now()})
             selected['eligible_at']=time.time()+300
             store.put('selected_sessions',selected)
+        n+=ingest(store,limit=64)
     progress(store,'daemon','ingest')
-    n=ingest(store)
+    n+=ingest(store)
     spool_files=list((store.root/'spool').glob('*.json'))
     progress(store,'daemon','idle',ingested=n,spool_count=len(spool_files),
              spool_oldest_age=max((time.time()-p.stat().st_mtime for p in spool_files if p.exists()),default=0))
@@ -331,7 +378,7 @@ def state(store):
         for run in d['runs']:
             if not run.get('cwd') and run.get('event_ids'):
                 row=db.execute('SELECT data FROM events WHERE id=?',(run['event_ids'][0],)).fetchone()
-                if row:run['cwd']=json.loads(row[0]).get('cwd')
+                if row:run['cwd']=store.event_data(row[0],db).get('cwd')
     for experiment in d['experiments']:
         if experiment.get('state'):experiment['status']=experiment['state']
     from .capabilities import project_lifecycle

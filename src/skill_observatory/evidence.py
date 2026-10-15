@@ -1,9 +1,34 @@
 """Bounded factual review contract; evidence never confers execution authority."""
 from __future__ import annotations
+import json
 import re
 from .store import canonical, digest
 
 CODE = re.compile(r'^[A-Za-z0-9_.:-]{1,120}$')
+
+
+def diagnostic_from_output(output):
+    """Extract allowlisted failure types, never raw commands/output or prompts."""
+    texts=[];codes=[]
+    def visit(value,depth=0):
+        if depth>5:return
+        if isinstance(value,dict):
+            for k,v in value.items():
+                if k in {'exit_code','exitCode'} and type(v) is int:codes.append(v)
+                elif k in {'output','text','content','metadata','result','value'}:visit(v,depth+1)
+        elif isinstance(value,list):
+            for v in value[:64]:visit(v,depth+1)
+        elif isinstance(value,str):
+            text=value[:1000000];texts.append(text)
+            try:visit(json.loads(text),depth+1)
+            except ValueError:pass
+    visit(output)
+    text='\n'.join(texts)
+    codes.extend(int(m) for m in re.findall(r'(?:exit_code[\"\s:]+|exit code[:\s]+|exited with code\s+)(-?\d+)',text,re.I))
+    failed=next((c for c in codes if c!=0),None)
+    if failed is None:return None
+    reason='CLI_ARGUMENT_MISMATCH' if re.search(r'unrecognized arguments|argument .*invalid choice',text,re.I) else 'TOOL_TIMEOUT' if 'TimeoutExpired' in text else 'TOOL_EXIT_NONZERO'
+    return {'status':'failed','exit_code':failed,'reason_code':reason}
 
 
 def attach_evidence(store, value):
@@ -36,7 +61,22 @@ def attach_evidence(store, value):
     # This receipt is source evidence, not an independent oracle signature.
     store.read_artifact(value['receipt_sha256'])
     h=store.artifact(canonical(value))
-    return store.put('run_evidence',{'id':value['run_id'],'capsule_sha256':h,'run_manifest_sha256':digest(canonical(run))})
+    manifest=digest(canonical(run))
+    with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        current=store.get('runs',run['id'],db)
+        if digest(canonical(current))!=manifest:raise ValueError('EVIDENCE_CAPSULE_RUN_DRIFT')
+        old=store.get('run_evidence',run['id'],db)
+        if old and old.get('capsule_sha256')==h and old.get('run_manifest_sha256')==manifest:return old
+        # Only a known pre-dispatch evidence wait can reopen. Missing admission
+        # metadata on an otherwise ambiguous legacy attempt is not proof of safety.
+        attempts=[__import__('json').loads(r[0]) for r in db.execute("SELECT data FROM entities WHERE kind='review_attempts' AND json_extract(data,'$.run_id')=?",(run['id'],))]
+        safe=not any(a.get('admission_sha256') or a.get('status') not in {'hold','deferred'}
+            or a.get('reason_code') not in {'DIAGNOSTIC_FACTS_REQUIRED','EVIDENCE_CAPSULE_RUN_DRIFT','DAILY_REVIEW_ATTEMPT_BUDGET_HOLD'} for a in attempts)
+        resumed=0
+        if safe:
+            resumed=db.execute("UPDATE jobs SET status='queued',reason_code=NULL,eligible_at=0,lease_until=0 WHERE run_id=? AND status='hold' AND reason_code IN ('DIAGNOSTIC_FACTS_REQUIRED','EVIDENCE_CAPSULE_RUN_DRIFT')",(run['id'],)).rowcount
+        return store.put('run_evidence',{'id':value['run_id'],'capsule_sha256':h,'run_manifest_sha256':manifest,'resumed_pre_dispatch_jobs':resumed},db)
 
 
 def build_capsule(store,run):
@@ -56,7 +96,7 @@ def build_capsule(store,run):
             row=db.execute('SELECT data FROM events WHERE id=?',(eid,)).fetchone()
             if row:
                 import json
-                event=json.loads(row[0]);events.append({k:event[k] for k in ('id','event','tool_name','tool_use_id','source','occurred_at') if k in event})
+                event=store.event_data(row[0],db);events.append({k:event[k] for k in ('id','event','tool_name','tool_use_id','source','occurred_at') if k in event})
     value={'schema_version':1,'run_id':run['id'],'facts':facts,'events':events,
            'coverage':'selected_redacted_facts_only','missing':missing,'outcome_truth':'runtime_only_unverified'}
     if len(canonical(value))>16000:raise ValueError('EVIDENCE_CAPSULE_TOO_LARGE')

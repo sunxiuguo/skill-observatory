@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 
 from .runtime import spool
@@ -121,7 +122,7 @@ def observe_session(store, path, expected_session_id, source):
     if (
         cursor.get("mtime_ns") == stat.st_mtime_ns
         and cursor.get("inode") == stat.st_ino
-        and cursor.get("size") == stat.st_size
+        and cursor.get("size") == stat.st_size and offset == stat.st_size
     ):
         return {
             "source": source,
@@ -138,11 +139,18 @@ def observe_session(store, path, expected_session_id, source):
 
     # A replaced/truncated session file cannot inherit the previous cursor.
     with path.open("rb") as f:
-        prefix = f.read(offset)
-        if len(prefix) != offset or digest(prefix) != cursor["prefix_sha256"]:
+        prefix_hash=hashlib.sha256();remaining=offset
+        while remaining:
+            block=f.read(min(1024*1024,remaining))
+            if not block:raise ValueError('TRANSCRIPT_DRIFT_HOLD')
+            prefix_hash.update(block);remaining-=len(block)
+        if prefix_hash.hexdigest() != cursor["prefix_sha256"]:
             raise ValueError("TRANSCRIPT_DRIFT_HOLD")
         f.seek(offset)
-        tail = f.read()
+        tail = f.read(2*1024*1024)
+        if b'\n' not in tail and len(tail)==2*1024*1024:
+            tail+=f.readline(6*1024*1024)
+            if b'\n' not in tail:raise ValueError('TRANSCRIPT_RECORD_TOO_LARGE')
     complete = tail[: tail.rfind(b"\n") + 1] if b"\n" in tail else b""
     turn = cursor.get("turn_id")
     calls = cursor.get("calls", {})
@@ -192,6 +200,7 @@ def observe_session(store, path, expected_session_id, source):
             base.update(tool_use_id=v.get("call_id"), tool_name=v.get("name"))
             raw = v.get("arguments", v.get("input", ""))
             calls[v.get("call_id")] = {
+                'tool_name':v.get('name'),
                 "skills": [s["id"] for s in registered if str(Path(s["path"]) / "SKILL.md") in raw],
                 "caps": [
                     {
@@ -230,6 +239,10 @@ def observe_session(store, path, expected_session_id, source):
                 except (ValueError, TypeError):
                     pass
             binding = calls.get(v.get("call_id"), {})
+            if isinstance(binding,dict):base['tool_name']=binding.get('tool_name')
+            from .evidence import diagnostic_from_output
+            diagnostic=diagnostic_from_output(outputs)
+            if diagnostic:base['diagnostic_fact']=diagnostic
             ids = binding.get("skills", []) if isinstance(binding, dict) else binding
             for c in binding.get("caps", []) if isinstance(binding, dict) else []:
                 content = store.read_artifact(c["content_sha256"]).decode()
@@ -285,12 +298,14 @@ def observe_session(store, path, expected_session_id, source):
                 count += 1
 
     end = offset + len(complete)
+    prefix_hash.update(complete)
+    if len(calls)>256:raise ValueError('TRANSCRIPT_PENDING_CALL_LIMIT')
     store.put(
         "cursors",
         {
             "id": cursor_id,
             "offset": end,
-            "prefix_sha256": digest(prefix + complete),
+            "prefix_sha256": prefix_hash.hexdigest(),
             "turn_id": turn,
             "calls": calls,
             "created_at": now(),

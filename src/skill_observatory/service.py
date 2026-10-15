@@ -2,12 +2,18 @@
 import os
 from pathlib import Path
 import plistlib
+import re
 import subprocess
 import sys
 import time
 from .store import atomic_write,digest,now
 
 LABEL='org.skill-observatory.runtime'
+
+def process_identity(pid):
+    result=subprocess.run(['ps','-p',str(pid),'-o','lstart='],capture_output=True,text=True,timeout=5)
+    if result.returncode not in {0,1}:raise ValueError('SERVICE_PROCESS_OBSERVATION_FAILED')
+    return result.stdout.strip() or None
 
 def service(store,action,port=8765,web_root=None):
     if sys.platform!='darwin':raise ValueError('LAUNCHD_UNAVAILABLE_USE_FOREGROUND_DAEMON')
@@ -21,9 +27,13 @@ def service(store,action,port=8765,web_root=None):
         p=subprocess.run(['launchctl',*args],capture_output=True,text=True,timeout=15)
         return p
     def stop():
+        before=launch('print',ref)
+        match=re.search(r'^\s*pid = (\d+)\s*$',before.stdout,re.M)
+        pid=int(match.group(1)) if match else None
+        identity=process_identity(pid) if pid else None
         launch('bootout',ref)
-        deadline=time.monotonic()+10
-        while launch('print',ref).returncode==0:
+        deadline=time.monotonic()+30
+        while launch('print',ref).returncode==0 or (pid and identity and process_identity(pid)==identity):
             if time.monotonic()>deadline:raise ValueError('SERVICE_STOP_NOT_CONFIRMED')
             time.sleep(.1)
     if action=='service-install':

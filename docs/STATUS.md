@@ -1,4 +1,54 @@
-# Current acceptance — 2026-10-13
+# Current acceptance — 2026-10-15
+
+This iteration restores the corrupted local ledger, bounds collection work,
+separates worker health from process liveness, adds lossless storage maintenance,
+and repairs the related daily-workflow planner and managed installation closure.
+The exact physical cause of SQLite corruption remains UNKNOWN. Offline recovery
+retained 122,400 events and 893 jobs and restored all five index-visible lost
+entities from a verified healthy backup; original bytes and hash receipts remain
+private. No admitted model/tool operation was replayed.
+
+| Evidence layer | Current boundary |
+|---|---|
+| Observation/runtime | Recovered ledger, bounded queue drain and transcript reads, backpressure, failure backoff, independent health and diagnostic scope checks verified |
+| Semantic review | Tool-free two-turn transport qualification passed; three synthetic schema-review attempts timed out and remain consumed/unknown; explicit owner execution HOLD prevents further automatic dispatch |
+| Evolution adapters | `awaiting_owner_adapters`; proposer, independent domain evaluator and activation owner remain absent |
+| Skill improvement / natural user outcome | HOLD / UNKNOWN; no promotion or domain truth invented |
+| Method recursion | UNVERIFIED |
+| Storage | Lossless artifact/backup compression applied; automatic bounded maintenance enabled locally; terminal-event payloads retain 30 hot days and durable identity/replay barriers |
+| Production installation | Dedicated wheel-hash runtime separates the service from the development environment; actual package/static/API/browser identity is verified at delivery |
+
+Same-ledger paired measurements (12 Store-open samples) reduce median open time
+from 70.007 ms to 4.715 ms. Forty identical writes advance revision 40 → 0 times,
+with wall time 1,934.5 → 439.4 ms. These are local engineering measurements, not
+end-to-end task/token or business-gain claims.
+
+Compression verified 4,422 artifact files (20,499,753 → 8,331,878 bytes) and ten
+private historical backups (1,696,461,312 → 391,025,751 bytes). Combined logical
+file-byte reduction is 1,317,603,436 bytes, about 1.23 GiB; APFS sharing/snapshots
+mean this is not an exact filesystem free-space measurement. Current events are
+only about seven days old, so none was eligible for the 30-day cold-event policy.
+Cold gzip bytes remain in SQLite with verified transparent reads and deterministic
+window/count/manifest summaries; authority, final-set consumption, attempts and
+outcome truth are never replaced by summaries. Automatic maintenance uses no LLM.
+
+The related daily workflow now distinguishes static metadata isolation from
+pending semantic work, emits actionable machine output, and defers only planner
+recommendations. Its over-budget historical run was closed through the canonical
+checkpoint, and the three recommended deferrals were applied. Final inspection
+found no active/recoverable/invalid runs and no remaining changed-input/defer
+work. This does not certify future natural daily runs or semantic knowledge gain.
+The original managed installer now includes the canonical relative-import closure;
+an installed-only CLI in an isolated HOME verifies no source-checkout dependency.
+
+Local acceptance includes required real Docker tests, real API/DOM integration,
+source/wheel byte audits and isolated installation. Final counts, production
+progress, loaded paths/assets and Git/CI identities are read back at delivery.
+Raw runs, recovery receipts, provider configuration and authorization evidence
+remain private. The reusable fixes belong to existing code owners; no new global
+Skill, hook owner, scheduler, vector store or promotion authority was introduced.
+
+# Historical reliability acceptance — 2026-10-13
 
 The reliability iteration repairs the audited observation, review,
 consumption and Web state defects. [RELIABILITY.md](RELIABILITY.md) maps R1–R13

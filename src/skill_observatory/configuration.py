@@ -27,9 +27,24 @@ def load_reviewer(store,isolated=True):
     if result is None:return None
     module,config=result
     reviewer=module.make_reviewer()
-    store.put('runtime',{'id':'reviewer','status':'configured_not_certified','owner_sha256':config['owner_sha256'],'created_at':now(),
+    certification=getattr(reviewer,'transport_certification',{})
+    status='owner_verified_tool_free_transport' if certification.get('verified') is True and isinstance(certification.get('proof_sha256'),str) and len(certification['proof_sha256'])==64 else 'configured_not_certified'
+    # A transport proof cannot override a trusted owner's explicit execution HOLD.
+    hold=getattr(reviewer,'execution_hold',None)
+    if hold:
+        import re
+        if not isinstance(hold,str) or not re.fullmatch(r'[A-Z0-9_]{1,160}',hold):raise ValueError('REVIEWER_EXECUTION_HOLD_INVALID')
+        status='semantic_integration_hold'
+    store.put('runtime',{'id':'reviewer','status':status,'transport_certification':certification,'owner_sha256':config['owner_sha256'],'created_at':now(),
+        'execution_hold':hold,
         'execution_mode':'background_tool_free','required_admission_contract':'background_tool_free',
         'capsule_schema_version':1,'isolation':'process_group_deadline'})
+    if hold:
+        from .reviewer import ReviewDeferred
+        import time
+        class HeldReviewer:
+            def review(self,store,run):raise ReviewDeferred(hold,time.time()+3600)
+        return HeldReviewer()
     if isolated:
         from .review_worker import IsolatedReviewer
         seconds=getattr(reviewer,'max_seconds',120)
@@ -41,7 +56,11 @@ def load_reviewer(store,isolated=True):
 def load_pipeline(store):
     from .pipeline import EvolutionPipeline
     result=_owner(store,'evolution')
-    if result is None:return EvolutionPipeline(store)
+    if result is None:
+        store.put('runtime',{'id':'evolution','status':'awaiting_owner_adapters',
+            'missing':['PROPOSER_ADAPTER_REQUIRED','INDEPENDENT_DOMAIN_EVALUATOR_REQUIRED','ACTIVATION_OWNER_REQUIRED'],
+            'created_at':now(),'automatic_promotion':False})
+        return EvolutionPipeline(store)
     module,config=result
     pipeline=module.make_pipeline(store)
     if not isinstance(pipeline,EvolutionPipeline) or pipeline.store is not store:

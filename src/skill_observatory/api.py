@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import json
 from pathlib import Path
 import secrets
+import sqlite3
 import time
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -60,7 +61,13 @@ def summary(store):
             'daemon_running':time.time()-daemon.get('heartbeat',0)<30,'heartbeat_age':time.time()-daemon['heartbeat'] if daemon.get('heartbeat') else None,
             'adapter_error_causes':counts.get('adapter_errors',0),'spool_count':daemon.get('spool_count'),
             'window_start':bounds[0],'window_end':now()}
-    result.update(runtime=runtime,runtime_errors=errors,pagination=pagination,
+    from .health import snapshot
+    live=snapshot(store.root)
+    if any(w.get('heartbeat') for w in live['workers']):
+        observed=live['workers'][0]
+        result['metrics'].update(daemon_running=observed['healthy'],heartbeat_age=observed.get('heartbeat_age'),
+            spool_count=observed.get('spool_count',result['metrics']['spool_count']))
+    result.update(runtime=runtime,runtime_errors=errors,pagination=pagination,health=live,
         capabilities={'semantic_review':next((r.get('status') for r in runtime if r['id']=='reviewer'),'unconfigured'),
             'strong_sandbox':'requires_current_environment_receipt','promotion':'requires_frozen_independent_final','hook_trust':'native_review_required','recursive_gain':'UNVERIFIED'})
     return result
@@ -71,28 +78,42 @@ def create_app(store=None, web_root=None, daemon=True, reviewer=None,pipeline=No
     if pipeline is None:
         from .pipeline import EvolutionPipeline
         pipeline=EvolutionPipeline(store)
+    def evolution_tick():
+        result=pipeline.tick()
+        if time.time()-getattr(store,'_maintenance_checked_at',0)>=3600:
+            from .maintenance import automatic_maintenance
+            automatic_maintenance(store);store._maintenance_checked_at=time.time()
+        return result
     async def worker(lane,callback,phase):
+        from .health import failure
         while True:
+            delay=1
             try:
-                progress(store,lane,phase)
+                deadline=time.time()+(getattr(reviewer,'max_seconds',120)+50 if lane=='review_worker' else 300)
+                progress(store,lane,phase,deadline_at=deadline)
                 await asyncio.to_thread(callback)
-                progress(store,lane,'idle')
-            except Exception as e:store.put('runtime_errors',{'id':lane,'reason_code':type(e).__name__,'created_at':time.time()})
-            await asyncio.sleep(1)
+                progress(store,lane,'idle',successful=True,deadline_at=None)
+            except Exception as e:
+                delay=failure(store,lane,type(e).__name__)
+            await asyncio.sleep(delay)
     async def watch():
+        from .health import read_lane,failure
         while True:
             for lane in ('review_worker','evolution_worker'):
-                row=store.get('runtime',lane) or {}
+                row=read_lane(store.root,lane)
                 bound=getattr(reviewer,'max_seconds',120)+50 if lane=='review_worker' else 300
-                if row.get('phase')!='idle' and time.time()-row.get('phase_started_at',time.time())>bound:
-                    store.put('runtime_errors',{'id':lane,'reason_code':'WORKER_DEADLINE_READBACK_REQUIRED','phase':row.get('phase'),'created_at':time.time()})
+                if row.get('status')!='failed' and row.get('phase')!='idle' and time.time()-row.get('phase_started_at',time.time())>bound:
+                    failure(store,lane,'WORKER_DEADLINE_READBACK_REQUIRED')
             await asyncio.sleep(2)
     @asynccontextmanager
     async def lifespan(app):
-        recover(store)
+        try:recover(store)
+        except sqlite3.DatabaseError:
+            from .health import failure
+            failure(store,'daemon','LEDGER_INTEGRITY_RECOVERY_REQUIRED')
         tasks=[asyncio.create_task(worker('daemon',lambda:collect(store),'collect')),
                asyncio.create_task(worker('review_worker',lambda:process_one(store,reviewer),'review')),
-               asyncio.create_task(worker('evolution_worker',pipeline.tick,'evolution')),
+               asyncio.create_task(worker('evolution_worker',evolution_tick,'evolution')),
                asyncio.create_task(watch())] if daemon else []
         try:yield
         finally:
@@ -113,7 +134,9 @@ def create_app(store=None, web_root=None, daemon=True, reviewer=None,pipeline=No
             sid=request.cookies.get('skillobs_session');s=sessions.get(sid)
             if not s or s['expires']<time.time():return JSONResponse({'reason_code':'SESSION_REQUIRED'},status_code=401)
             if request.method not in {'GET','HEAD'} and not secrets.compare_digest(request.headers.get('x-csrf-token',''),s['csrf']):return JSONResponse({'reason_code':'CSRF_REJECTED'},status_code=403)
-        response=await call_next(request)
+        try:response=await call_next(request)
+        except sqlite3.DatabaseError:
+            response=JSONResponse({'reason_code':'LEDGER_UNAVAILABLE','recovery_required':True},status_code=503)
         response.headers.update({'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"})
         return response
     @app.get('/api/session')
@@ -127,6 +150,11 @@ def create_app(store=None, web_root=None, daemon=True, reviewer=None,pipeline=No
         r=JSONResponse({'csrf':csrf});r.set_cookie('skillobs_session',sid,httponly=True,samesite='strict',max_age=3600);return r
     @app.get('/api/state')
     async def get_state():return await asyncio.to_thread(state,store)
+    @app.get('/api/health')
+    async def get_health():
+        from .health import snapshot
+        value=snapshot(store.root)
+        return JSONResponse(value,status_code=200 if value['status']=='healthy' else 503)
     @app.get('/api/summary')
     async def get_summary():return await asyncio.to_thread(summary,store)
     @app.get('/api/entities/{kind}')
@@ -149,6 +177,7 @@ def create_app(store=None, web_root=None, daemon=True, reviewer=None,pipeline=No
             with store.connect() as db:value=capability_projection(store,value,db)
         if kind=='experiments' and value.get('state'):value['status']=value['state']
         if kind=='runs':
+            value['diagnostics']=store.get('run_diagnostics',id)
             with store.connect() as db:
                 row=db.execute("SELECT data FROM entities WHERE kind='reviews' AND json_extract(data,'$.run_id')=? ORDER BY rowid DESC LIMIT 1",(id,)).fetchone()
                 value['related_review']=json.loads(row[0]) if row else None

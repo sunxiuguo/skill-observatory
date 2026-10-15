@@ -29,7 +29,7 @@ git clone https://github.com/sunxiuguo/skill-observatory.git
 cd skill-observatory
 uv sync --locked
 uv run python scripts/build.py
-uv pip install --reinstall dist/skill_observatory-0.2.0-py3-none-any.whl
+uv pip install --no-deps --reinstall dist/skill_observatory-0.2.0-py3-none-any.whl
 uv run skillobs doctor
 uv run skillobs serve --port 8765
 ```
@@ -136,8 +136,42 @@ uv run skillobs uninstall-hooks --project /absolute/project
 Service/hook changes retain backups and refuse content-hash drift. Uninstall
 retains private state for recovery. An upgrade is stop → rebuild/reinstall wheel
 → start, retaining state; if Python path changes, reinstall the user service.
+For a persistent service, install the reviewed wheel into a dedicated virtual
+environment created from the locked dependencies and run `service-install` with
+that environment’s Python. Keep development `uv run` operations in a separate
+environment; editable reinstalls can replace package static assets.
 Do not delete state to recover an interrupted attempt. Unknown model/tool side
 effects become HOLD and require readback before a retry.
+
+## Storage and recovery
+
+SQLite remains the transactional ledger; content-addressed files hold evidence.
+Opening an existing ledger does not rerun migrations, unchanged writes do not
+advance its revision, and collection drains bounded batches before following
+transcripts. Independent worker receipts distinguish successful work from a live
+process even when the ledger cannot be read:
+
+```sh
+uv run skillobs health
+uv run skillobs storage-status
+uv run skillobs storage-compress
+uv run skillobs storage-archive --before 2026-01-01T00:00:00Z
+```
+
+Maintenance commands default to a dry run. `--apply` makes the selected change;
+archives retain lossless bytes, identity/hash tombstones and a verifiable summary.
+Never replace final-set consumption, unknown attempts, authority or outcome truth
+with a prose summary. See [storage policy](docs/STORAGE.md) for eligibility,
+restoration, hash checks and compaction boundaries.
+
+Stop the original service before offline recovery. The trusted backup must cover
+every index-visible lost entity; unexplained loss refuses replacement. Source
+bytes and a recovery receipt are retained, and no model/tool operation is replayed:
+
+```sh
+uv run skillobs storage-recover --backup /absolute/known-healthy.sqlite3
+uv run skillobs storage-recover --backup /absolute/known-healthy.sqlite3 --apply
+```
 
 ## Verify
 

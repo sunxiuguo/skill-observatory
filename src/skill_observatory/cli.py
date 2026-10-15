@@ -61,7 +61,12 @@ def doctor(store):
 def main():
     ap=argparse.ArgumentParser(prog='skillobs');ap.add_argument('--state')
     sub=ap.add_subparsers(dest='command',required=True)
-    for c in ['doctor','status','hook','tick','daemon','recover']:sub.add_parser(c)
+    for c in ['doctor','status','hook','tick','daemon','recover','health','storage-status']:sub.add_parser(c)
+    p=sub.add_parser('storage-recover');p.add_argument('--backup',required=True);p.add_argument('--apply',action='store_true')
+    p=sub.add_parser('storage-archive');p.add_argument('--before',required=True);p.add_argument('--limit',type=int,default=1000);p.add_argument('--apply',action='store_true')
+    p=sub.add_parser('storage-compress');p.add_argument('--limit',type=int,default=1000);p.add_argument('--apply',action='store_true')
+    p=sub.add_parser('storage-compact');p.add_argument('--apply',action='store_true')
+    p=sub.add_parser('authorize-scope');p.add_argument('--root',required=True);p.add_argument('--evidence',required=True);p.add_argument('--diagnostics',action='store_true')
     p=sub.add_parser('register');p.add_argument('path');p.add_argument('--owner',required=True);p.add_argument('--license')
     p=sub.add_parser('capability-register');p.add_argument('path');p.add_argument('--owner',required=True);p.add_argument('--kind',choices=['skill','script'],default='skill');p.add_argument('--purpose');p.add_argument('--background');p.add_argument('--origin-file');p.add_argument('--scope',required=True);p.add_argument('--id')
     p=sub.add_parser('discover');p.add_argument('--query',default='');p.add_argument('--cwd',required=True)
@@ -87,7 +92,15 @@ def main():
     p=sub.add_parser('review-import');p.add_argument('file');p.add_argument('--reviewer',required=True)
     p=sub.add_parser('rollback');p.add_argument('id')
     p=sub.add_parser('export');p.add_argument('--output',required=True)
-    args=ap.parse_args();s=Store(args.state)
+    args=ap.parse_args()
+    root=Path(args.state or os.environ.get('SKILLOBS_STATE',Path.home()/'.local/state/skill-observatory')).resolve()
+    if args.command=='health':
+        from .health import snapshot
+        print(json.dumps(snapshot(root),ensure_ascii=False,indent=2));return
+    if args.command=='storage-recover':
+        from .recovery import rebuild
+        print(json.dumps(rebuild(root,args.backup,args.apply),ensure_ascii=False,indent=2));return
+    s=Store(args.state)
     try:
         if args.command=='hook':
             # No LLM/network/transcript scan here. Fast atomic spool only.
@@ -95,6 +108,29 @@ def main():
             if len(raw)>1_000_000:raise ValueError('HOOK_INPUT_TOO_LARGE')
             spool(s,json.loads(raw));print('{}');return
         if args.command=='doctor':result=doctor(s)
+        elif args.command=='authorize-scope':
+            scope=str(Path(args.root).resolve());proof=Path(args.evidence)
+            if proof.is_symlink() or not proof.is_file() or proof.stat().st_size>12000:raise ValueError('SCOPE_AUTHORITY_EVIDENCE_REQUIRED')
+            h=s.artifact(proof.read_bytes());settings=s.settings();scopes=settings.get('scopes',[])
+            if scope not in scopes:scopes=[*scopes,scope]
+            diagnostics=settings.get('diagnostic_scopes',[])
+            if args.diagnostics and scope not in diagnostics:diagnostics=[*diagnostics,scope]
+            result={'id':'scope_'+digest(canonical([scope,h]))[:24],'root':scope,'authority':'human_user',
+                'authorization_origin':'owner_direct','operations':['observe','review']+(['diagnostics'] if args.diagnostics else []),
+                'evidence_sha256':h,'historical_import':False,'automatic_skill_write':False,'created_at':now()}
+            s.put('scope_authorizations',result);s.settings({'scopes':scopes,'diagnostic_scopes':diagnostics})
+        elif args.command=='storage-status':
+            from .maintenance import storage_inventory
+            result=storage_inventory(s)
+        elif args.command=='storage-archive':
+            from .maintenance import archive_events
+            result=archive_events(s,args.before,args.limit,args.apply)
+        elif args.command=='storage-compress':
+            from .maintenance import compress_artifacts
+            result=compress_artifacts(s,limit=args.limit,apply=args.apply)
+        elif args.command=='storage-compact':
+            from .maintenance import compact_database
+            result=compact_database(s,args.apply)
         elif args.command=='status':result=state(s)
         elif args.command=='review-evidence-import':
             from .evidence import attach_evidence
