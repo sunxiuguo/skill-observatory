@@ -1,4 +1,5 @@
 import json
+import pytest
 import urllib.request
 import urllib.error
 from skill_observatory.background import ToolFreeGuard
@@ -63,3 +64,42 @@ def test_owner_hold_is_not_overridden_by_transport_qualification(tmp_path,monkey
     assert state['status']=='semantic_integration_hold'
     assert state['transport_certification']['verified'] is True
     assert state['execution_hold']=='BACKGROUND_SEMANTIC_INTEGRATION_HOLD'
+
+
+def test_guard_records_request_wait_and_rejects_bad_size_without_upstream():
+    with ToolFreeGuard('https://example.invalid/v1','model') as guard:
+        try:
+            urllib.request.urlopen(urllib.request.Request(guard.base_url+'/responses',data=b'{}',headers={'Content-Length':'broken'}),timeout=3)
+        except urllib.error.HTTPError as error:assert error.code==413
+    assert guard.receipts[0]['reason_code']=='BACKGROUND_REQUEST_SIZE_REFUSED'
+    assert guard.receipts[0]['forwarded'] is False
+
+
+def test_guard_timeout_has_phase_and_uses_explicit_deadline(monkeypatch):
+    captured=[]
+    class Connection:
+        def __init__(self,*args,**kwargs):captured.append(kwargs['timeout'])
+        def request(self,*args,**kwargs):pass
+        def getresponse(self):raise TimeoutError('must not persist private upstream details')
+        def close(self):pass
+    monkeypatch.setattr('skill_observatory.background.http.client.HTTPSConnection',Connection)
+    with ToolFreeGuard('https://example.invalid/v1','model',timeout=300) as guard:
+        try:send(guard.base_url,{'model':'model','tools':[]})
+        except urllib.error.HTTPError as error:assert error.code==504
+    row=guard.receipts[0]
+    assert captured==[300]
+    assert row['failed_phase']=='awaiting_headers' and row['reason_code']=='BACKGROUND_TRANSPORT_TIMEOUT'
+    assert 'private' not in json.dumps(row)
+
+
+@pytest.mark.parametrize('transport_verified',[False,True])
+def test_schema_canary_status_requires_transport_proof(tmp_path,monkeypatch,transport_verified):
+    from types import SimpleNamespace
+    from skill_observatory import configuration
+    from skill_observatory.store import Store
+    s=Store(tmp_path/'state');reviewer=SimpleNamespace(transport_certification={'verified':transport_verified,'proof_sha256':'a'*64},
+        semantic_certification={'verified':True,'proof_sha256':'b'*64})
+    monkeypatch.setattr(configuration,'_owner',lambda *args:(SimpleNamespace(make_reviewer=lambda:reviewer),{'owner_sha256':'c'*64}))
+    configuration.load_reviewer(s,isolated=False)
+    row=s.get('runtime','reviewer')
+    assert row['status']==('owner_verified_schema_review' if transport_verified else 'configured_not_certified')

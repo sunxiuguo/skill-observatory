@@ -50,3 +50,29 @@ def test_provider_schema_mapping_keeps_local_truth_gate(tmp_path,monkeypatch,for
  if forged_truth:
   with pytest.raises(ValueError,match='INDEPENDENT_OUTCOME'):reviewer.review(s,run)
  else:assert reviewer.review(s,run)['status']=='reviewed'
+
+
+@pytest.mark.parametrize('transport_failure',['eof','failed_turn'])
+def test_reviewer_persists_transport_failure_without_waiting_for_generic_timeout(tmp_path,monkeypatch,transport_failure):
+ from skill_observatory.reviewer import CodexReviewer
+ s=Store(tmp_path/'state');s.settings({'scopes':[str(tmp_path)]})
+ spool(s,dict(hook_event_name='Stop',session_id='s',turn_id='t',cwd=str(tmp_path)));ingest(s);run=s.list('runs')[0]
+ class Client:
+  def __init__(self):
+   self.notifications=[];self.messages=queue.Queue();self.wire_receipts=[{'phase':'awaiting_headers','forwarded':True,'secret':'never store'}]
+   if transport_failure=='eof':self.messages.put({'_transport':'APP_SERVER_EOF'})
+   else:
+    self.messages.put({'method':'error','params':{'threadId':'thread','turnId':'turn','error':{'codexErrorInfo':'HttpConnectionFailed','message':'private details'},'willRetry':False}})
+    self.messages.put({'method':'turn/completed','params':{'threadId':'thread','turnId':'turn','turn':{'status':'failed'}}})
+  def request(self,method,params):return {'thread':{'id':'thread'},'model':'synthetic'} if method=='thread/start' else {'turn':{'id':'turn'}}
+  def __enter__(self):return self
+  def __exit__(self,*args):pass
+ monkeypatch.setattr('skill_observatory.reviewer.build_capsule',lambda *args:{'schema_version':1,'missing':[],'facts':{'synthetic':True}})
+ admission=lambda *args:{'ok':True,'maximum_verified_effort':'max','execution_mode':'background_tool_free','tool_free_context_verified':True,'redacted_evidence_allowed':True,'evidence_capsule_versions':[1]}
+ reviewer=CodexReviewer(Client,admission,'synthetic','synthetic','max',tmp_path)
+ with pytest.raises(ValueError,match='APP_SERVER_EXITED_BEFORE_TERMINAL|REVIEW_TURN_FAILED'):reviewer.review(s,run)
+ attempt=s.list('review_attempts')[0]
+ assert attempt['transport']==[{'phase':'awaiting_headers','forwarded':True}]
+ assert attempt['wall_seconds']<10
+ if transport_failure=='failed_turn':assert attempt['last_error_code']=='HttpConnectionFailed' and attempt['server_will_retry'] is False
+ assert 'private' not in json.dumps(attempt) and 'secret' not in json.dumps(attempt)

@@ -165,12 +165,8 @@ class EvolutionPipeline:
             self._recover_interrupted(db)
             stages = self._rows(db, "experiments")
             ready = self._ready_states()
-            blocked_by_missing_adapter = any(
-                stage.get("state") in ready and not self._adapter_for(stage)
-                for stage in stages
-            )
             candidates = [
-                stage for stage in stages if stage.get("state") in ready
+                stage for stage in stages if stage.get("state") in ready and self._adapter_for(stage)
             ]
             if candidates:
                 stage = sorted(
@@ -186,9 +182,6 @@ class EvolutionPipeline:
                 )
                 self.store.put("experiments", stage, db=db)
                 return stage, True
-            if blocked_by_missing_adapter:
-                return None
-
             reviews = sorted(
                 self._rows(db, "reviews"),
                 key=lambda item: (item.get("created_at") or "", item["id"]),

@@ -185,3 +185,38 @@ runtime records `semantic_integration_hold` independently of transport proof and
 defers before creating a reviewer subprocess. Transport qualification alone does
 not establish schema-review completion or domain correctness. Remove a HOLD only
 after inspecting the consumed attempts and verifying the relevant integration.
+
+## Original-owner receipt adapters
+
+A private `make_pipeline(store)` may return `owner_adapters.OwnerReceiptPipeline`.
+It consumes the existing owners' products through trusted local commands:
+
+```sh
+skillobs evolution-proposal-bind proposal-binding.json
+skillobs evolution-evaluation-bind evaluation-binding.json
+```
+
+The proposal binding contains `review_id`, `owner_incident_id` and optional
+`cost_attempt_ids` / `proposer_method_version_id`. It reads `skill-evolution show`,
+checks the exact target/parent/candidate, and snapshots the original proposal.
+The owner still prepares and validates candidates; this bridge adds no generator.
+The evaluation binding contains `candidate_id`, `evaluation_id`, and independently
+signed `domain_receipt` / `cost_receipt`. It consumes an already measured, frozen
+evaluation through `final_gate.finalize`, never repeats paired trials or seals
+its own truth. Missing receipts may be added once to the same frozen evaluation;
+changed existing inputs refuse. Activation consumes only a task receipt already
+accepted by `outcomes.accept_task_result`. Actual domain execution and fresh
+contexts remain with those owners, not with a model assertion.
+
+Missing inputs leave ready stages untouched. Imports do not resume unknown/held
+external operations; no model, installer or final-set trial runs while waiting.
+Automatic installation also requires `settings.auto_promote=true`; the local
+setting remains false. The pipeline still requires the original exact human grant
+and every final gate.
+The CLI bindings cannot grant installation or label synthetic tasks as real.
+
+`semantic_certification` records an owner's hash-bound completed schema canary
+separately from tool-free transport certification. Both are required for the
+`owner_verified_schema_review` status; an explicit execution HOLD still wins.
+The local background owner uses aligned, bounded transport/review deadlines and
+zero implicit request/stream retries, retaining every failed/unknown attempt.

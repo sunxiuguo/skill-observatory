@@ -1,4 +1,51 @@
-# Current acceptance — 2026-10-15
+# Current acceptance — 2026-10-15 (semantic recovery)
+
+The previous closeout stopped at an execution HOLD before completing available
+transport diagnosis and owner wiring. Two new isolated live Provider schema
+reviews now complete with schema/identity checks and usage receipts, in about
+94 and 109 seconds. The second uses the original failed case's selected textual
+facts with new run/attempt identities; no old unknown attempt was replayed.
+Its upstream took 102.931 seconds to return response headers and 104.157 seconds
+for the full response. The old 120-second overall deadline and 120-second proxy
+wait left little room for latency variation. The exact cause of each historical
+timeout remains UNKNOWN because those runs did not record transport phases.
+
+The local owner now uses a bounded 300-second review/proxy budget and explicitly
+disables hidden HTTP/SSE retries. The guard records request/connection/header/body
+phases, byte counts, durations and typed failures without prompt, credentials or
+raw error bodies. The reviewer preserves bounded event/error/transport counters
+and detects app-server EOF promptly. A hash-bound two-turn tool-free qualification
+and schema canary certify this transport only, not domain truth or improvement.
+Production code/assets and its exact status are read back after the original
+service upgrade lifecycle.
+
+`OwnerReceiptPipeline` connects the existing original-owner proposal,
+`final_gate.finalize` and independently accepted fresh-context task receipts.
+Trusted local `evolution-proposal-bind` and `evolution-evaluation-bind` commands
+bind exact proposal/evaluation hashes. The adapter does not generate labels,
+sign domain/cost receipts, duplicate installation or invoke models while waiting.
+Missing owner inputs leave the stage ready with its attempt count unchanged;
+one waiting stage cannot starve another ready review. Disabled automatic
+promotion also leaves installation stages unclaimed. Unknown/held side effects
+are never reopened by a receipt import. The local evolution owner is now wired
+to these adapters; it still needs actual owner proposals, measured task-family
+evaluations with independent domain/all-attempt cost receipts, and accepted
+post-install task evidence. That is an explicit input boundary, not an empty
+callback. An engineering canary does not substitute for those inputs.
+
+| Evidence layer | Current boundary |
+|---|---|
+| Observation/storage | Earlier recovery, performance and lossless maintenance evidence below remains applicable |
+| Semantic execution | Two completed live schema canaries; transport and semantic-canary proofs separate from domain correctness |
+| Evolution wiring | Receipt adapters and local owner connected; missing real inputs wait without dispatch or attempt consumption |
+| Real Skill / natural user gain | HOLD / UNKNOWN; no candidate promoted from synthetic canaries or self-grading |
+| Method RSI | UNVERIFIED; accepted method lineage and independent downstream gain still required |
+
+Final applicable tests, clean distribution/install, production readback, remote
+SHA and final-head CI are recorded at delivery. Private receipts and owner/proof
+configuration remain excluded from the public distribution.
+
+# Earlier engineering acceptance — 2026-10-15
 
 This iteration restores the corrupted local ledger, bounds collection work,
 separates worker health from process liveness, adds lossless storage maintenance,

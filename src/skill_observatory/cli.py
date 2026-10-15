@@ -73,6 +73,8 @@ def main():
     p=sub.add_parser('artifact-import');p.add_argument('file')
     p=sub.add_parser('usage-import');p.add_argument('file')
     p=sub.add_parser('review-evidence-import');p.add_argument('file')
+    for command in ('evolution-proposal-bind','evolution-evaluation-bind'):
+        p=sub.add_parser(command);p.add_argument('file')
     p=sub.add_parser('review-reconcile');p.add_argument('id');p.add_argument('--readback',required=True)
     p=sub.add_parser('capture');p.add_argument('--spec',required=True);p.add_argument('--auto',action='store_true')
     for command in ('capture-validate','capture-activate'):
@@ -135,6 +137,9 @@ def main():
         elif args.command=='review-evidence-import':
             from .evidence import attach_evidence
             result=attach_evidence(s,json.loads(Path(args.file).read_text()))
+        elif args.command in {'evolution-proposal-bind','evolution-evaluation-bind'}:
+            from .owner_adapters import bind_proposal,bind_evaluation
+            result=(bind_proposal if args.command=='evolution-proposal-bind' else bind_evaluation)(s,json.loads(Path(args.file).read_text()))
         elif args.command=='review-reconcile':
             from .reviewer import reconcile_attempt
             result=reconcile_attempt(s,args.id,json.loads(Path(args.readback).read_text()))

@@ -29,13 +29,16 @@ def load_reviewer(store,isolated=True):
     reviewer=module.make_reviewer()
     certification=getattr(reviewer,'transport_certification',{})
     status='owner_verified_tool_free_transport' if certification.get('verified') is True and isinstance(certification.get('proof_sha256'),str) and len(certification['proof_sha256'])==64 else 'configured_not_certified'
+    semantic=getattr(reviewer,'semantic_certification',{})
+    if status=='owner_verified_tool_free_transport' and semantic.get('verified') is True and isinstance(semantic.get('proof_sha256'),str) and len(semantic['proof_sha256'])==64:
+        status='owner_verified_schema_review'
     # A transport proof cannot override a trusted owner's explicit execution HOLD.
     hold=getattr(reviewer,'execution_hold',None)
     if hold:
         import re
         if not isinstance(hold,str) or not re.fullmatch(r'[A-Z0-9_]{1,160}',hold):raise ValueError('REVIEWER_EXECUTION_HOLD_INVALID')
         status='semantic_integration_hold'
-    store.put('runtime',{'id':'reviewer','status':status,'transport_certification':certification,'owner_sha256':config['owner_sha256'],'created_at':now(),
+    store.put('runtime',{'id':'reviewer','status':status,'transport_certification':certification,'semantic_certification':semantic,'owner_sha256':config['owner_sha256'],'created_at':now(),
         'execution_hold':hold,
         'execution_mode':'background_tool_free','required_admission_contract':'background_tool_free',
         'capsule_schema_version':1,'isolation':'process_group_deadline'})
@@ -66,5 +69,7 @@ def load_pipeline(store):
     if not isinstance(pipeline,EvolutionPipeline) or pipeline.store is not store:
         raise ValueError('EVOLUTION_OWNER_INTERFACE_INVALID')
     store.put('runtime',{'id':'evolution','status':'configured_not_certified',
+                        'adapter_mode':getattr(pipeline,'adapter_mode','custom_owner'),
+                        'required_inputs':getattr(pipeline,'required_inputs',[]),
                         'owner_sha256':config['owner_sha256'],'created_at':now()})
     return pipeline

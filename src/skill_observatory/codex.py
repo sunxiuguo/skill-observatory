@@ -18,9 +18,11 @@ class AppServer:
         self.request('initialize',{'clientInfo':{'name':'skill_observatory','title':'Skill Observatory','version':'0.1.0'}})
         self.send({'method':'initialized','params':{}})
     def _read(self):
-        for line in self.proc.stdout:
-            try:self.messages.put(json.loads(line))
-            except json.JSONDecodeError:pass
+        try:
+            for line in self.proc.stdout:
+                try:self.messages.put(json.loads(line))
+                except json.JSONDecodeError:pass
+        finally:self.messages.put({'_transport':'APP_SERVER_EOF'})
     def send(self,value):
         self.proc.stdin.write(json.dumps(value)+'\n');self.proc.stdin.flush()
     def request(self,method,params,timeout=20):
@@ -28,6 +30,7 @@ class AppServer:
         while time.monotonic()<deadline:
             try:m=self.messages.get(timeout=max(.01,deadline-time.monotonic()))
             except queue.Empty:break
+            if m.get('_transport')=='APP_SERVER_EOF':raise ValueError('APP_SERVER_EXITED_BEFORE_TERMINAL')
             if m.get('id')==id:
                 if 'error' in m:raise ValueError('APP_SERVER_ERROR:'+str(m['error'].get('code'))+':'+str(m['error'].get('message')))
                 return m['result']
