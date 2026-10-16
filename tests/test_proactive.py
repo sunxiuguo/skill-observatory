@@ -180,3 +180,65 @@ def test_exact_cli_and_child_shapes_work_but_mislabeled_origin_stays_rejected(tm
             observe_session(s, p, sid, 'codex-desktop')
     b = plan(s, index, stamp=STAMP)
     assert all('reason_code' not in i['signal'] for i in b['items'] if i['kind'] == 'chat')
+
+
+def test_fresh_history_and_due_share_budget_without_losing_sweep(tmp_path):
+    s, scope, index = setup(tmp_path)
+    chat(scope, index, 'due', STAMP-1000)
+    first = plan(s, index, stamp=STAMP)
+    finish(s, first['batch_id'], receipt(s, first), stamp=STAMP)
+    for i in range(20): chat(scope, index, f'old{i:02}', STAMP-800+i)
+    chat(scope, index, 'latest', STAMP+86400)
+    seen = set()
+    b = plan(s, index, limit=4, stamp=STAMP+86401)
+    ids = {x.get('session_id') for x in b['items']}
+    assert {'latest', 'due', 'old00'} <= ids
+    for i in range(9):
+        if b['status'] == 'no_change':
+            break
+        seen.update(x.get('session_id') for x in b['items'])
+        finish(s, b['batch_id'], receipt(s, b, stamp=STAMP+86401+i), stamp=STAMP+86401+i)
+        b = plan(s, index, limit=4, stamp=STAMP+86402+i)
+    assert all(f'old{i:02}' in seen for i in range(20))
+
+
+def test_single_item_rotation_does_not_starve_history(tmp_path):
+    s, scope, index = setup(tmp_path)
+    for i in range(6): chat(scope, index, f'old{i}', STAMP-100+i)
+    seen = set()
+    for i in range(10):
+        chat(scope, index, f'new{i}', STAMP+i)
+        b = plan(s, index, limit=1, stamp=STAMP+i)
+        seen.update(x.get('session_id') for x in b['items'])
+        finish(s, b['batch_id'], receipt(s, b, stamp=STAMP+i), stamp=STAMP+i)
+    assert 'new0' in seen and 'old0' in seen
+
+
+@pytest.mark.parametrize('fault', [None, 'identity', 'cwd', 'version', 'symlink', 'parent_symlink'])
+def test_archive_exact_fallback_keeps_original_identity_gates(tmp_path, fault):
+    s, scope, index = setup(tmp_path); p = chat(scope, index, 'archived')
+    archive = index.parent/'archived_sessions'; archive.mkdir()
+    target = archive/p.name; p.rename(target)
+    if fault in {'identity','cwd','version'}:
+        value=json.loads(target.read_text());m=value['payload']
+        m[{'identity':'id','cwd':'cwd','version':'cli_version'}[fault]] = {
+            'identity':'wrong','cwd':str(tmp_path/'outside'),'version':'99.0'}[fault]
+        target.write_text(json.dumps(value)+'\n')
+    if fault=='symlink':
+        other=scope/'other'; target.rename(other);target.symlink_to(other)
+    if fault=='parent_symlink':
+        other=scope/'archive';archive.rename(other);archive.symlink_to(other, target_is_directory=True)
+    item=next(x for x in plan(s,index,stamp=STAMP)['items'] if x['kind']=='chat')
+    if fault is None:
+        assert item['signal']['path']==str(target) and 'reason_code' not in item['signal']
+    else:
+        assert item['signal']['reason_code']
+
+
+def test_missing_index_due_reference_stays_visible(tmp_path):
+    s, scope, index = setup(tmp_path); chat(scope,index,'lost')
+    b=plan(s,index,stamp=STAMP);finish(s,b['batch_id'],receipt(s,b),stamp=STAMP)
+    with sqlite3.connect(index) as db:db.execute('DELETE FROM threads')
+    b=plan(s,index,stamp=STAMP+86401)
+    item=next(x for x in b['items'] if x['kind']=='chat')
+    assert item['session_id']=='lost' and item['signal']['reason_code']=='CODEX_INDEX_REFERENCE_MISSING'

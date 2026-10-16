@@ -89,10 +89,17 @@ def audit(store, stamp):
             'claim': 'signals_only_not_skill_or_method_gain'}
 
 
-def _source(row, store):
+def _source(row, store, index_parent=None):
     """Read metadata only after scope filtering. Unrecognized shapes remain visible."""
     path = Path(row['rollout_path'])
     signal = {'path': str(path)}
+    # Codex can archive a transcript without updating its index pointer. Resolve
+    # exactly one basename, then apply the same identity/schema/scope checks.
+    if not path.exists() and not path.is_symlink() and index_parent is not None:
+        archived = index_parent / 'archived_sessions' / path.name
+        if not archived.parent.is_symlink() and (archived.exists() or archived.is_symlink()):
+            path = archived
+            signal.update(path=str(path), indexed_path=row['rollout_path'])
     try:
         if path.is_symlink() or not path.is_file():
             raise ValueError('TRANSCRIPT_NOT_REGULAR')
@@ -154,7 +161,7 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
             escaped = scope.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
             where.append("(cwd=? OR cwd LIKE ? ESCAPE '\\')")
             args.extend([scope, escaped.rstrip('/') + '/%'])
-        sources = []; due_sources = []
+        sources = []; fresh_sources = []; due_sources = []; missing_due = []
         if where:
             # Never open the Codex index for writing. No titles/prompts selected.
             with closing(sqlite3.connect(index_db.resolve().as_uri() + '?mode=ro', uri=True)) as index:
@@ -169,29 +176,57 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
                          + 'AND id!=? ORDER BY updated_at,id LIMIT 201')
                 index.row_factory = sqlite3.Row
                 sources = [dict(r) for r in index.execute(query, [*args, cutoff, key[0], key[0], key[1], exclude_session or ''])]
+                fresh_sources = [dict(r) for r in index.execute(
+                    'SELECT id,rollout_path,cwd,updated_at FROM threads WHERE (' + ' OR '.join(where)
+                    + ') AND updated_at>=? AND id!=? ORDER BY updated_at DESC,id DESC LIMIT 201',
+                    [*args, cutoff, exclude_session or ''])]
                 # Follow-up obligations outlive the discovery window. They must
                 # not disappear merely because no one touched the old chat.
                 due = db.execute("SELECT data FROM entities WHERE kind='proactive_review_items' "
                     "AND id!='self' AND json_extract(data,'$.eligible_at')<=? "
                     "ORDER BY json_extract(data,'$.eligible_at'),id LIMIT ?", (stamp, limit)).fetchall()
                 for prior in due:
-                    sid = json.loads(prior[0])['session_id']
+                    prior_item = json.loads(prior[0]); sid = prior_item['session_id']
                     row = index.execute('SELECT id,rollout_path,cwd,updated_at FROM threads WHERE id=?', (sid,)).fetchone()
                     if row and sid != exclude_session and _inside_scope(store, row['cwd']):
                         due_sources.append(dict(row))
-        overflow = len(sources) > 200
+                    elif not row and sid != exclude_session and _inside_scope(store, prior_item['cwd']):
+                        signal = {**prior_item['signal'], 'reason_code': 'CODEX_INDEX_REFERENCE_MISSING'}
+                        missing_due.append({**prior_item, 'signal': signal,
+                            'fingerprint': digest(canonical([VERSION, prior_item['updated_at'], signal]))})
+        overflow = len(sources) > 200 or len(fresh_sources) > 200
         candidates = []
         scanned = 0; skipped_scope = 0; skipped_internal = 0
-        due_ids = {row['id'] for row in due_sources}
-        ordered = due_sources + [row for row in sources[:200] if row['id'] not in due_ids]
-        for row in ordered:
-            if row['id'] not in due_ids:
+        lanes = {'fresh': iter(fresh_sources[:200]), 'history': iter(sources[:200]),
+                 'due': iter(missing_due + due_sources)}
+        # Weighted rotation reserves fresh work without starving sweep/due work,
+        # even for a one-item budget. Only history advances the history cursor.
+        schedule = ['fresh', 'history', 'fresh', 'due']
+        position = prior_scan.get('position', 0) % len(schedule)
+        visited = set(); exhausted = set()
+        due_ids = {row.get('session_id', row['id']) for row in missing_due + due_sources}
+        while len(candidates) < limit and len(exhausted) < len(lanes):
+            lane = schedule[position]
+            if lane in exhausted:
+                position = (position + 1) % len(schedule)
+                continue
+            row = next(lanes[lane], None)
+            if row is None:
+                exhausted.add(lane)
+                position = (position + 1) % len(schedule)
+                continue
+            if lane == 'history':
                 key = [row['updated_at'], row['id']]
             # Resolved scope is rechecked before opening any transcript.
             if not _inside_scope(store, row['cwd']):
                 skipped_scope += 1
                 continue
-            item = _source(row, store); scanned += 1
+            sid = row.get('session_id', row['id'])
+            if sid in visited or (lane != 'due' and sid in due_ids):
+                continue
+            visited.add(sid)
+            item = row if row.get('kind') == 'chat' else _source(row, store, index_db.resolve().parent)
+            scanned += 1
             if exclude_session and item['signal'].get('root_session_id') == exclude_session:
                 skipped_internal += 1
                 continue
@@ -201,12 +236,12 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
                     item['previous_review'] = {k: previous[k] for k in
                         ('disposition', 'evidence_sha256', 'consecutive_holds', 'escalate') if k in previous}
                 candidates.append(item)
-            if len(candidates) >= limit:
-                overflow = True
-                break
+                position = (position + 1) % len(schedule)
+        overflow = overflow or len(exhausted) < len(lanes)
         # Restart a bounded rolling sweep after exhaustion. Pending batches resume
         # before discovery, so crashes cannot skip unfinished work.
-        store.put('proactive_review_state', {'id': 'scan', 'after': key if overflow else [cutoff, '']}, db)
+        store.put('proactive_review_state', {'id': 'scan', 'after': key if 'history' not in exhausted else [cutoff, ''],
+                                           'position': position}, db)
         signals = audit(store, stamp)
         signals['index_scope_policy'] = 'lexical_prefilter_then_resolved_scope; aliases_outside_prefilter_uncovered'
         signals['discovery_scope_skipped'] = skipped_scope
@@ -283,7 +318,7 @@ def finish(store, batch_id, receipt, *, stamp=None):
                     changed = path.is_symlink() or any(item['signal'].get(k) != v for k, v in
                         [('size', stat.st_size), ('mtime_ns', stat.st_mtime_ns), ('inode', stat.st_ino)])
                 except OSError:
-                    changed = True
+                    changed = 'size' in item['signal']
             elif item['signal']['code_sha256'] != _code_identity():
                 changed = True
             if changed: source_changes[item['id']] = True

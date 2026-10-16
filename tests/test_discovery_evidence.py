@@ -32,7 +32,7 @@ def test_chinese_long_query_detects_frozen_version_drift(tmp_path):
 def test_capsule_bound_to_actual_version_run_and_redacted_facts(tmp_path):
  s,p,cap,r,h=fixture(tmp_path)
  value=dict(run_id=r['id'],goal='Process a scoped event',success_criteria='Correct identity and durable evidence',owner='owner',version_id=cap['version_id'],result={'status':'failed','reason_code':'IDENTITY_MISMATCH'},steps=[{'event_id':r['event_ids'][0],'fact':'Execution ended with an identity mismatch.'}],receipt_sha256=h)
- attach_evidence(s,value);capsule=build_capsule(s,r)
+ attach_evidence(s,value);r=s.get('runs',r['id']);capsule=build_capsule(s,r)
  assert capsule['facts']==value and not capsule['missing']
  assert capsule['outcome_truth']=='runtime_only_unverified'
  with pytest.raises(ValueError,match='EVIDENCE_CAPSULE_CONTRACT_INVALID'):attach_evidence(s,{**value,'goal':'api_key=secret'})

@@ -4,6 +4,24 @@ import queue
 from skill_observatory.store import Store,canonical
 from skill_observatory.runtime import spool,ingest,process_one,accept_review,tick
 
+
+def test_generation_schema_refuses_names_unobserved_and_cross_version_tuples(tmp_path):
+ from jsonschema import validate,ValidationError
+ from skill_observatory.reviewer import review_schema
+ s=Store(tmp_path/'state');s.settings({'scopes':[str(tmp_path)]})
+ spool(s,dict(hook_event_name='Stop',session_id='s',turn_id='t',cwd=str(tmp_path)));ingest(s)
+ triage=process_one(s)
+ receipt={k:v for k,v in triage.items() if k not in {'id','created_at','status','reason_code'}}
+ a={'skill_id':'sk_first','package_sha256':'a'*64,'attribution':'verified_read'}
+ b={'skill_id':'sk_second','package_sha256':'b'*64,'attribution':'explicit_loaded'}
+ schema=review_schema({'attributions':[a,b]})
+ validate(receipt,schema)
+ exact={**receipt,'skill_id':a['skill_id'],'skill_package_sha256':a['package_sha256'],'attribution':a['attribution']}
+ validate(exact,schema)
+ for wrong in [{'skill_id':'skill-evolution-loop'}, {'skill_package_sha256':'b'*64}, {'attribution':'executed_script'}]:
+  with pytest.raises(ValidationError):validate({**exact,**wrong},schema)
+ with pytest.raises(ValidationError):validate(exact,review_schema({'attributions':[]}))
+
 def test_review_cannot_claim_missing_independent_truth(tmp_path):
  s=Store(tmp_path/'s');s.settings({'scopes':[str(tmp_path)]})
  spool(s,{'hook_event_name':'Stop','session_id':'s','turn_id':'t','cwd':str(tmp_path)})

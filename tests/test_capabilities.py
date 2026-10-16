@@ -51,3 +51,36 @@ def test_version_and_actor_do_not_cross_attribute(tmp_path):
     assert len(s.list('capability_invocations'))==2
     with pytest.raises(ValueError,match='VERSION_CAPABILITY'):record_usage(s,{**r,'version_id':'missing'})
     with pytest.raises(ValueError,match='OUTSIDE_SCOPE'):register_capability(s,path,'owner',scope=tmp_path)
+
+
+def test_catalog_only_skill_verified_read_reaches_exact_run_without_authority(tmp_path):
+    from skill_observatory.runtime import spool, ingest
+    s,p,path,c,h=fixture(tmp_path)
+    spool(s,dict(hook_event_name='Stop',session_id='s',turn_id='t',cwd=str(p)));ingest(s)
+    run=s.list('runs')[0]
+    use=dict(capability_id=c['id'],version_id=c['version_id'],cwd=str(p),session_id='s',turn_id='t',
+             invocation_id='read',source='trusted_fixture',event_id='mention',stage='mentioned')
+    record_usage(s,use)
+    assert not s.get('runs',run['id'])['attributions']
+    record_usage(s,{**use,'event_id':'read','stage':'verified_read','evidence_sha256':h})
+    attr=s.get('runs',run['id'])['attributions'][0];skill=s.get('skills',attr['skill_id'])
+    assert attr['version_id']==c['version_id'] and attr['package_sha256']==c['package_sha256']
+    assert skill['capability_id']==c['id'] and skill['manifest']==s.get('capability_versions',c['version_id'])['manifest']
+    assert skill['auto_promote'] is False and not s.list('authority_grants')
+    assert not s.list('installations') and not s.list('experiments')
+
+
+def test_late_historical_read_keeps_loaded_version_and_cannot_cross_actor(tmp_path):
+    from skill_observatory.runtime import spool, ingest
+    s,p,path,c,h=fixture(tmp_path)
+    spool(s,dict(hook_event_name='Stop',session_id='s',turn_id='t',cwd=str(p)));ingest(s);run=s.list('runs')[0]
+    (path/'SKILL.md').write_text('New current Skill bytes.')
+    newer=register_capability(s,path,'owner',scope=p)
+    use=dict(capability_id=c['id'],version_id=c['version_id'],cwd=str(p),session_id='s',turn_id='t',
+             invocation_id='read',source='trusted_fixture',event_id='child-read',stage='verified_read',evidence_sha256=h)
+    record_usage(s,{**use,'agent_id':'child'})
+    assert not s.get('runs',run['id'])['attributions']
+    record_usage(s,{**use,'event_id':'parent-read'})
+    attr=s.get('runs',run['id'])['attributions'][0]
+    assert attr['package_sha256']==c['package_sha256']
+    assert s.get('skills',attr['skill_id'])['package_sha256']==newer['package_sha256']

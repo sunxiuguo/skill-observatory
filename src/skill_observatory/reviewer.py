@@ -19,6 +19,20 @@ class ReviewDeferred(ValueError):
         super().__init__(reason); self.eligible_at=eligible_at
 
 
+def review_schema(run):
+    """Constrain generation to exact tuples; local acceptance stays authoritative."""
+    schema=json.loads((files('skill_observatory')/'review.schema.json').read_text())
+    choices=[{'properties':{'skill_id':{'const':None},'skill_package_sha256':{'const':None},
+                          'attribution':{'const':'unknown'}}}]
+    for attribution in run.get('attributions',[]):
+        if attribution.get('skill_id') and attribution.get('package_sha256'):
+            choices.append({'properties':{'skill_id':{'const':attribution['skill_id']},
+                'skill_package_sha256':{'const':attribution['package_sha256']},
+                'attribution':{'const':attribution['attribution']}}})
+    schema.setdefault('allOf',[]).append({'anyOf':choices})
+    return schema
+
+
 class CodexReviewer:
     def __init__(self, client_factory, admission, model, provider, effort, cwd, max_seconds=120, daily_attempt_limit=5,native_output_schema=True):
         self.client_factory=client_factory;self.admission=admission;self.model=model
@@ -45,7 +59,7 @@ class CodexReviewer:
             raise ValueError('BACKGROUND_REVIEW_ADMISSION_CONTRACT_REQUIRED')
         if admitted.get('redacted_evidence_allowed') is not True or 1 not in admitted.get('evidence_capsule_versions',[]):
             raise ValueError('EVIDENCE_CAPSULE_DATA_AUTHORITY_REQUIRED')
-        schema=json.loads((files('skill_observatory')/'review.schema.json').read_text())
+        schema=review_schema(run)
         evidence=store.artifact(canonical(run));version='codex-review-v2'
         data={'capsule':capsule,'evidence_manifest_sha256':evidence,'attributions':run.get('attributions',[]),
               'constraints':{'reviewer_version':version,'review_id':'rv_'+run['id'],'run_id':run['id'],'exact_attributions_only':True,'no_scores_or_installation':True,'outcome_truth':'runtime_only_unverified','scope':'observed_run_only'}}

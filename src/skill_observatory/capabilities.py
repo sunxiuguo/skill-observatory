@@ -49,6 +49,67 @@ def _manifest(path,kind):
     return script_manifest(path,kind)
 
 
+def _project_skill(store, cap, version, db):
+    """Legacy evaluator view of the canonical frozen version; grants nothing."""
+    manifest = version['manifest']
+    if version['capability_id'] != cap['id'] or manifest['package_sha256'] != version['package_sha256'] \
+            or digest(canonical(manifest['files'])) != version['package_sha256']:
+        raise ValueError('FROZEN_SKILL_VERSION_INVALID')
+    snapshot = json.loads(store.read_artifact(version['snapshot_sha256']))
+    if snapshot.get('files') != manifest['files'] or snapshot.get('package_sha256') != version['package_sha256']:
+        raise ValueError('FROZEN_SKILL_VERSION_INVALID')
+    sid = 'sk_' + digest(str(Path(cap['path']).resolve()).encode())[:24]
+    old = store.get('skills', sid, db) or {}
+    if old and old['owner'] != cap['owner']:
+        raise ValueError('CANONICAL_OWNER_CONFLICT')
+    value = {**old, 'id': sid, 'name': cap['name'], 'path': cap['path'], 'owner': cap['owner'],
+        'source': cap['source'], 'license': old.get('license'), 'status': old.get('status', 'observing'),
+        'capability_id': cap['id'], 'version_id': version['id'], 'package_sha256': version['package_sha256'],
+        'manifest': manifest, 'created_at': old.get('created_at', cap['created_at']),
+        'updated_at': version['created_at'], 'auto_promote': False, 'score': old.get('score'),
+        'missing': old.get('missing', ['independent_final_evidence'])}
+    return store.put('skills', value, db)
+
+
+def bind_run_attributions(store, run, db, version_id=None):
+    """Bind only exact verified invocations for this execution, turn and actor.
+
+    Mention/selection and current disk bytes cannot establish historical loading.
+    The caller owns the transaction and any existing no-replay gate.
+    """
+    execution = run.get('execution_session_id', run.get('session_id'))
+    if not run.get('cwd') or not run.get('turn_id'):
+        return run  # Unknown legacy context cannot be reconstructed from a use.
+    rows = db.execute("SELECT data FROM entities WHERE kind='capability_invocations' "
+        "AND json_extract(data,'$.session_id')=? AND json_extract(data,'$.turn_id')=?",
+        (execution, run.get('turn_id'))).fetchall()
+    attributions = list(run.get('attributions', []))
+    for raw in rows:
+        invocation = json.loads(raw[0])
+        if invocation.get('agent_id') != run.get('agent_id') or 'verified_read' not in invocation['stages'] \
+                or not invocation.get('evidence_ids') or (version_id and invocation['version_id'] != version_id):
+            continue
+        if str(Path(invocation['cwd']).resolve()) != str(Path(run['cwd']).resolve()):
+            continue
+        _scope(store, invocation['cwd'])
+        version = store.get('capability_versions', invocation['version_id'], db)
+        cap = store.get('capability_catalog', invocation['capability_id'], db)
+        if not version or not cap or cap['kind'] != 'skill' or version['capability_id'] != cap['id']:
+            continue
+        current = store.get('capability_versions', cap['version_id'], db)
+        skill = _project_skill(store, cap, current, db)
+        attribution = {'skill_id': skill['id'], 'package_sha256': version['package_sha256'],
+            'file_sha256': version['manifest']['files']['SKILL.md'], 'attribution': 'verified_read',
+            'capability_id': cap['id'], 'version_id': version['id'],
+            'loaded_version_source': 'capability_invocation_verified_read'}
+        if not any(all(a.get(k) == attribution[k] for k in ('skill_id', 'package_sha256', 'attribution')) for a in attributions):
+            attributions.append(attribution)
+    if attributions != run.get('attributions', []):
+        run = {**run, 'attributions': attributions}
+        store.put('runs', run, db)
+    return run
+
+
 def register_capability(store,path,owner,kind='skill',purpose=None,background=None,origin=None,capability_id=None,scope=None):
     if kind not in {'skill','script'}:raise ValueError('CAPABILITY_KIND_INVALID')
     owner=_text(owner,'owner',True);p=Path(path).resolve()
@@ -94,11 +155,7 @@ def register_capability(store,path,owner,kind='skill',purpose=None,background=No
         # Legacy evaluator identity is a projection of the immutable version,
         # never a second mutable package fact or a new authority grant.
         if kind=='skill':
-            sid='sk_'+digest(str(p).encode())[:24]
-            old_skill=store.get('skills',sid,db)
-            if old_skill:
-                store.put('skills',{**old_skill,'capability_id':capid,'version_id':vid,
-                    'package_sha256':m['package_sha256'],'manifest':m,'updated_at':t},db)
+            _project_skill(store, value, store.get('capability_versions', vid, db), db)
     return value
 
 
@@ -137,6 +194,12 @@ def record_usage(store,receipt):
         if r.get('status'):u['status']=r['status']
         u['updated_at']=now()
         store.put('capability_observations',observed,db);store.put('capability_invocations',u,db)
+        if 'verified_read' in u['stages']:
+            runs = db.execute("SELECT data FROM entities WHERE kind='runs' AND "
+                "COALESCE(json_extract(data,'$.execution_session_id'),json_extract(data,'$.session_id'))=? "
+                "AND json_extract(data,'$.turn_id')=? LIMIT 2", (u['session_id'], u['turn_id'])).fetchall()
+            if len(runs) == 1:
+                bind_run_attributions(store, json.loads(runs[0][0]), db)
     return u
 
 

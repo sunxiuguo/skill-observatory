@@ -1,4 +1,49 @@
-# Proactive review and self-repair — 2026-10-15
+# First scheduled review and repairs — 2026-10-16
+
+The first daily heartbeat actually triggered. Its bounded review found fresh
+conversation starvation behind the historical sweep, stale archived transcript
+pointers, incomplete ordinary-delegation command examples, and a catalog-to-review
+attribution gap. These were actionable engineering defects, rather than evidence
+that every tool failure was caused by a Skill.
+
+The worklist now rotates fresh, historical and due work with a bounded index
+read; only historical scanning advances its cursor. Pending batches remain
+immutable. Exact archived-basename recovery retains schema/session/cwd checks,
+rejects symlinks and preserves missing follow-up references. Behavioral tests
+cover fairness, cursor coverage, single-item budgets and refusal cases.
+
+Verified capability reads now project the exact execution/turn/actor/cwd and
+frozen historical package into review attribution. Catalog registration grants
+no installation authority. Generation is constrained to observed identity tuples
+or explicit unknown; local acceptance remains authoritative. The original real
+attempt rejected for an unbound identity remains consumed. After a fresh synthetic
+schema qualification, a different real task's selected facts completed semantic
+review in about 45 seconds with correct historical attribution. Its HOLD identifies
+missing environment/task evidence; it does not certify a Skill defect or outcome.
+
+Two incomplete ordinary-delegation examples were replaced through their canonical
+managed installer: real-work admission declares its workload class, and finish
+supplies the required evidence kind. Installed/canonical bytes match, with backup
+and rollback transactions retained. Natural reuse and task gain are still unknown.
+One external coding child produced no patch after bounded warm recovery; it was
+closed/rejected with its costs preserved, and the root completed the repair.
+
+Validation: 179 backend tests passed with required real Docker execution, 9 real
+API/DOM tests passed, and contract/build/distribution checks passed. An immutable
+wheel runtime was installed through the existing service lifecycle after a
+verified losslessly compressed SQLite backup. Loaded code, assets and reviewer
+certification were read back. Storage maintenance continues to use SQLite and the
+existing content-addressed/lossless archive owners; no new parallel store or ledger
+was introduced. Coverage is bounded, with historical/active-source follow-ups
+remaining; the global denominator is unknown.
+
+This is an operating scheduled engineering-repair loop. Independent domain
+comparison, natural downstream gain and accepted next-generation method lineage
+are still missing: O2/O3 remain HOLD/UNKNOWN and O7 remains UNVERIFIED. Automatic
+promotion remains disabled. Software delivery and final-head CI are checked
+separately from these outcome claims.
+
+# Earlier proactive implementation — 2026-10-15
 
 A dedicated Native recurring review was absent from the inspected local schedules.
 The owner-authorized daily heartbeat is now saved for 08:30 Asia/Shanghai and

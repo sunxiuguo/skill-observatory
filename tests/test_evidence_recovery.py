@@ -14,6 +14,7 @@ def fixture(tmp_path):
     spool(s,dict(hook_event_name='Stop',session_id='s',turn_id='t',cwd=str(tmp_path)));ingest(s)
     run=s.list('runs')[0];h=s.artifact(b'selected private receipt')
     record_usage(s,dict(capability_id=cap['id'],version_id=cap['version_id'],cwd=str(tmp_path),session_id='s',turn_id='t',invocation_id='read',stage='verified_read',source='fixture',event_id='read',evidence_sha256=h))
+    run=s.get('runs',run['id'])
     reviewer=CodexReviewer(None,None,'unused','unused','max',tmp_path)
     process_one(s,reviewer)
     assert s.jobs()[0]['reason_code']=='DIAGNOSTIC_FACTS_REQUIRED'

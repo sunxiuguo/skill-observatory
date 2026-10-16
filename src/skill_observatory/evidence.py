@@ -66,6 +66,9 @@ def attach_evidence(store, value):
         db.execute('BEGIN IMMEDIATE')
         current=store.get('runs',run['id'],db)
         if digest(canonical(current))!=manifest:raise ValueError('EVIDENCE_CAPSULE_RUN_DRIFT')
+        from .capabilities import bind_run_attributions
+        current=bind_run_attributions(store,current,db,version_id=value['version_id'])
+        manifest=digest(canonical(current))
         old=store.get('run_evidence',run['id'],db)
         if old and old.get('capsule_sha256')==h and old.get('run_manifest_sha256')==manifest:return old
         # Only a known pre-dispatch evidence wait can reopen. Missing admission
