@@ -78,6 +78,36 @@ def grant_owner(store,target,authority_id,evidence_sha256,expires_at=None):
     return store.put('authority_grants',{**g,'created_at':now()})
 
 
+def grant_package_owner(store,target,authority_id,evidence_sha256,parent_package,candidate_package,changed_files,expires_at=None):
+    """Same trusted human-grant ingress, frozen to two exact complete packages.
+
+    This does not install or turn on promotion. No HTTP/UI signing/authority
+    endpoint exists; the calling owner must select actual human authorization.
+    """
+    from .packages import snapshot_package,read_package,changed_files as changes
+    root=Path(target)
+    if root.is_symlink() or any(p.is_symlink() for p in root.parents) or not root.is_dir():raise ValueError('PACKAGE_ROOT_REJECTED')
+    root=root.resolve()
+    if '.codex/plugins/cache' in str(root) or '.agents/skills' in str(root):raise ValueError('OWNING_INSTALLER_REQUIRED')
+    skill=next((s for s in store.list('skills') if Path(s['path']).resolve()==root),None)
+    if not skill or skill['owner']!='skill-evolution-loop' or skill['source']!='user-owned':raise ValueError('OWNER_REGISTRY_REQUIRED')
+    if authority_expired(expires_at):raise ValueError('AUTHORITY_EXPIRED')
+    store.read_artifact(evidence_sha256)
+    if snapshot_package(store,root)!=parent_package:raise ValueError('OWNER_PACKAGE_PARENT_DRIFT')
+    after=read_package(store,candidate_package)
+    if 'SKILL.md' not in after:raise ValueError('OWNER_PACKAGE_SKILL_REQUIRED')
+    changed=changes(store,parent_package,candidate_package,changed_files)
+    if not changed:raise ValueError('CANDIDATE_NO_CHANGE')
+    grant={'id':authority_id,'target':str(root),'owner':'skill-evolution-loop','surface':'package','status':'authorized',
+           'skill_id':skill['id'],'parent_package_digest':parent_package['package_digest'],'candidate_package_digest':candidate_package['package_digest'],
+           'changed_files':changed,'evidence_sha256':evidence_sha256,'expires_at':expires_at}
+    old=store.get('authority_grants',authority_id)
+    if old:
+        if any(old.get(k)!=v for k,v in grant.items()):raise ValueError('AUTHORITY_DRIFT')
+        return old
+    return store.put('authority_grants',{**grant,'created_at':now()})
+
+
 def grant(store, target, authority_id, expires_at, evidence_sha256):
     p=Path(target)
     if p.is_symlink() or not p.is_file():raise ValueError('TARGET_NOT_REGULAR')
@@ -163,4 +193,4 @@ def activate(store,id,run_id):
     receipt=validate_task_receipt(store,store.get('task_receipts',r['outcome_receipt_id']) or {})
     if receipt['installation_id']!=id:raise ValueError('TASK_INSTALLATION_MISMATCH')
     if digest(Path(i['target']).read_bytes())!=i['after_sha256']:raise ValueError('DRIFT_HOLD')
-    i.update(status='activated',activated=True,activation_run_id=run_id,updated_at=now());store.put('installations',i);return i
+    i.update(status='activated',activated=True,activation_run_id=run_id,activated_at=now(),updated_at=now());store.put('installations',i);return i

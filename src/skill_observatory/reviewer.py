@@ -57,7 +57,7 @@ class CodexReviewer:
         # Do not borrow Native-parent spawn certification for a background job.
         if admitted.get('execution_mode')!='background_tool_free' or admitted.get('tool_free_context_verified') is not True:
             raise ValueError('BACKGROUND_REVIEW_ADMISSION_CONTRACT_REQUIRED')
-        if admitted.get('redacted_evidence_allowed') is not True or 1 not in admitted.get('evidence_capsule_versions',[]):
+        if admitted.get('redacted_evidence_allowed') is not True or capsule['schema_version'] not in admitted.get('evidence_capsule_versions',[]):
             raise ValueError('EVIDENCE_CAPSULE_DATA_AUTHORITY_REQUIRED')
         schema=review_schema(run)
         evidence=store.artifact(canonical(run));version='codex-review-v2'

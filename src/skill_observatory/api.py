@@ -70,6 +70,8 @@ def summary(store):
     result.update(runtime=runtime,runtime_errors=errors,pagination=pagination,health=live,
         capabilities={'semantic_review':next((r.get('status') for r in runtime if r['id']=='reviewer'),'unconfigured'),
             'strong_sandbox':'requires_current_environment_receipt','promotion':'requires_frozen_independent_final','hook_trust':'native_review_required','recursive_gain':'UNVERIFIED'})
+    from .semantic_progress import project
+    result["semantic_progress"]=project(store)
     return result
 
 

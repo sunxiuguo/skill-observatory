@@ -57,6 +57,7 @@ interface Toast {
 
 interface StoreValue {
   loading: boolean;
+  refreshing: boolean;
   slow: boolean;
   error: ApiError | null;
   offline: boolean;
@@ -137,6 +138,7 @@ function isApiError(e: unknown): ApiError {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ObservatoryState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [slow, setSlow] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [offline, setOffline] = useState(typeof navigator !== "undefined" ? !navigator.onLine : false);
@@ -219,6 +221,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const generation = ++refreshGeneration.current;
     const controller = new AbortController();
     refreshController.current = controller;
+    setRefreshing(true);
     const request = (async () => {
       try {
         const next = await fetchState({ signal: controller.signal });
@@ -236,6 +239,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         throw api;
       } finally {
         if (generation === refreshGeneration.current) {
+          setRefreshing(false);
           refreshController.current = null;
           refreshInFlight.current = null;
         }
@@ -326,7 +330,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await refresh({ force: true });
         if (options.clearDraft) setSettingsDraft(null);
         pushToast("success", "settings-saved");
-        setAnnouncement(locale === "zh-CN" ? "设置已保存" : "Settings saved");
+        setAnnouncement("settings-saved");
       } catch (e) {
         const api = isApiError(e);
         pushToast("error", "settings-save-failed", api.reason_code);
@@ -376,7 +380,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await apiRetryJob(id);
         await refresh({ force: true });
         pushToast("success", locale === "zh-CN" ? "任务已恢复" : "Job resumed");
-        setAnnouncement(locale === "zh-CN" ? `任务 ${id} 已恢复` : `Job ${id} resumed`);
+        setAnnouncement(`job-resumed:${id}`);
       } catch (e) {
         const api = isApiError(e);
         pushToast("error", locale === "zh-CN" ? "恢复失败" : "Retry failed", api.reason_code);
@@ -394,7 +398,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await apiRollback(id);
         await refresh({ force: true });
         pushToast("success", locale === "zh-CN" ? "回滚已开始" : "Rollback started");
-        setAnnouncement(locale === "zh-CN" ? `安装 ${id} 回滚已开始` : `Rollback started for ${id}`);
+        setAnnouncement(`rollback-started:${id}`);
       } catch (e) {
         const api = isApiError(e);
         pushToast("error", locale === "zh-CN" ? "回滚失败" : "Rollback failed", api.reason_code);
@@ -408,6 +412,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<StoreValue>(
     () => ({
       loading,
+      refreshing,
       slow,
       error,
       offline,
@@ -433,7 +438,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       dismissToast,
     }),
     [
-      loading, slow, error, offline, state, locale, timezone, settings, busy, toasts, announcement,
+      loading, refreshing, slow, error, offline, state, locale, timezone, settings, busy, toasts, announcement,
       ui.drawer, ui.settingsDraft, setDrawer, uiFilters, setSettingsDraft, setLocaleImmediate,
       setTimezoneImmediate, setPausedImmediate, persistSettings, doRetryJob, doRollback, refresh,
       dismissToast,

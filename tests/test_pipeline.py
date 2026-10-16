@@ -14,11 +14,13 @@ from skill_observatory.runtime import register
 from skill_observatory.store import Store, canonical, digest
 
 
-def add_case(tmp_path, store, suffix, decision="CANDIDATE"):
+def add_case(tmp_path, store, suffix, decision="CANDIDATE", files=None):
     root = tmp_path / f"owned-{suffix}"
     root.mkdir()
     target = root / "SKILL.md"
     target.write_bytes(b"parent fixture")
+    for name,data in (files or {}).items():
+        path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
     skill = register(store, root, "skill-evolution-loop")
     evidence = store.artifact(
         b"synthetic mechanics authorization; not a real improvement grant"
@@ -111,80 +113,41 @@ def final_gate_evaluator(store):
 
     def evaluator(payload):
         candidate = store.get("candidates", payload["candidate_id"])
-        protocol = {
-            "id": "protocol-fixture",
-            "arm_files": {
-                "parent": {"SKILL.md": candidate["parent_sha256"]},
-                "candidate": {"SKILL.md": candidate["candidate_sha256"]},
-            },
-            "oracle_sha256": store.artifact(b"fixture oracle"),
-            "activation_oracle_sha256": store.artifact(
-                b"fixture activation oracle"
-            ),
-            "cases": [{"id": "case-fixture", "split": "final"}],
-            "min_gain": 0,
-            "synthetic": False,
-            "final_exposed": False,
-            "model": "fixture-model",
-            "max_verified_effort": "fixture-effort",
-            "cost_limits": {"money": 1, "tokens": 1, "wall_seconds": 2},
-        }
-        protocol_sha256 = digest(canonical(protocol))
-        evaluation = {
-            "id": "evaluation-fixture",
-            "protocol_id": protocol["id"],
-            "protocol_sha256": protocol_sha256,
-            "attempt_id": "evaluation-fixture-attempt",
-            "missing": [
-                "DOMAIN_GUARDRAIL_RECEIPT_REQUIRED",
-                "COST_COVERAGE_REQUIRED",
-            ],
-            "paired_gain_lower_bound": 0.1,
-        }
-        evaluation_sha256 = store.artifact(canonical(evaluation))
-        store.put("protocols", protocol)
-        store.put("evaluations", evaluation)
-        store.put(
-            "evaluation_attempts",
-            {
-                "id": evaluation["attempt_id"],
-                "result_sha256": evaluation_sha256,
-            },
-        )
-        common = {
-            "evaluation_sha256": evaluation_sha256,
-            "protocol_sha256": protocol_sha256,
-            "evidence_sha256": protocol["oracle_sha256"],
-        }
-        domain = seal_owner_receipt(
-            store,
-            "domain",
-            {
-                **common,
-                "case_ids": ["case-fixture"],
-                "oracle_sha256": protocol["oracle_sha256"],
-                "independent_final": True,
-                "comparable": True,
-                "guardrails_pass": True,
-                "regressions_pass": True,
-                "regression_case_ids": ["case-fixture"],
-                "guardrail_case_ids": ["case-fixture"],
-            },
-        )
-        attempt_ids = [evaluation["attempt_id"], *candidate.get("cost_attempt_ids", [])]
-        cost = seal_owner_receipt(
-            store,
-            "cost",
-            {
-                **common,
-                "all_attempts_covered": True,
-                "budget_pass": True,
-                "attempt_ids": attempt_ids,
-                "money": 0,
-                "tokens": 0,
-                "wall_seconds": 1,
-            },
-        )
+        import math
+        proof=store.artifact(b'kernel fixture provenance only')
+        labels={str(i):{'result':store.artifact(str(i).encode())} for i in range(8)}
+        cases=[{'id':i,'split':'final','source':'real_incident','categories':['regression','guardrail'],'evidence_sha256':store.artifact(('provenance '+i).encode()),'input_files':{'case':store.artifact(i.encode())},'inputs_sha256':digest(canonical({'case':store.artifact(i.encode())}))} for i in labels]
+        protocol={'id':'protocol-fixture','schema_version':2,
+            'arm_files':{'parent':{'SKILL.md':candidate['parent_sha256']},'candidate':{'SKILL.md':candidate['candidate_sha256']}},
+            'oracle_sha256':store.artifact(canonical(labels)),'activation_oracle_sha256':store.artifact(b'fixture activation oracle'),
+            'cases':cases,'min_gain':0,'alpha':.05,'synthetic':False,'final_exposed':False,'model':'fixture-model','max_verified_effort':'fixture-effort',
+            'cost_limits':{'money':1,'tokens':1,'wall_seconds':20},'cost_accounting':{'currency':'USD','wall_basis':'sum_duration'},'execution_identity':{'kind':'deterministic-python'}}
+        protocol_sha256=digest(canonical(protocol));trials=[]
+        unit={'money':0,'tokens':0,'currency':'USD','input_tokens':0,'output_tokens':0,'cached_input_tokens':0}
+        for case in cases:
+            for arm in ('parent','candidate'):
+                t={'trial_id':case['id']+arm,'case_id':case['id'],'arm':arm,'passed':arm=='candidate',
+                    'receipt':{'status':'completed','exit_code':0,'container_id':case['id']+arm,'wall_seconds':1,'input_manifest_sha256':digest(canonical({**protocol['arm_files'][arm],**case['input_files']}))},
+                    'artifacts':labels[case['id']] if arm=='candidate' else {},'cost':unit}
+                t['receipt_artifact']=store.artifact(canonical(t));trials.append(t)
+        evaluation={'id':'evaluation-fixture','schema_version':2,'protocol_id':protocol['id'],'protocol_sha256':protocol_sha256,
+            'attempt_id':'evaluation-fixture-attempt','missing':['DOMAIN_GUARDRAIL_RECEIPT_REQUIRED','COST_COVERAGE_REQUIRED'],
+            'paired_gain':1,'paired_gain_lower_bound':1-math.sqrt(2*math.log(20)/8),'paired_cases':8,'trials':trials}
+        from skill_observatory.evaluation import claim_evaluation
+        evaluation['attempt_id'],_,_=claim_evaluation(store,protocol,cases)
+        evaluation_sha256=store.artifact(canonical(evaluation));store.put('protocols',protocol);store.put('evaluations',evaluation)
+        evalattempt={'id':evaluation['attempt_id'],'status':'completed_hold','result_sha256':evaluation_sha256}
+        store.put('evaluation_attempts',evalattempt)
+        refs=[{'kind':'evaluation_attempts','id':evalattempt['id'],'sha256':store.artifact(canonical(evalattempt))}]
+        for id_ in candidate.get('cost_attempt_ids',[]):
+            row={'id':id_,'candidate_id':candidate['id'],'status':'completed','cost':{**unit,'wall_seconds':1}}
+            store.put('generation_attempts',row);refs.append({'kind':'generation_attempts','id':id_,'sha256':store.artifact(canonical(row))})
+        common={'schema_version':2,'evaluation_sha256':evaluation_sha256,'protocol_sha256':protocol_sha256,'evidence_sha256':proof}
+        domain=seal_owner_receipt(store,'domain',{**common,'case_ids':list(labels),'oracle_sha256':protocol['oracle_sha256'],
+            'independent_final':True,'comparable':True,'guardrails_pass':True,'regressions_pass':True,
+            'regression_case_ids':list(labels),'guardrail_case_ids':list(labels),'trial_receipt_sha256':[t['receipt_artifact'] for t in trials]})
+        cost=seal_owner_receipt(store,'cost',{**common,'all_attempts_covered':True,'budget_pass':True,'attempt_ids':[ref['id'] for ref in refs],
+            'attempt_refs':refs,'money':0,'tokens':0,'currency':'USD','wall_seconds':16+len(candidate.get('cost_attempt_ids',[]))})
         return finalize(
             store,
             candidate["id"],

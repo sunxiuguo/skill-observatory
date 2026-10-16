@@ -33,6 +33,22 @@
 
 领域改善认证仍走现有 owner：准备好原 proposal 后 `evolution-proposal-bind`；冻结独立领域/全部尝试成本证据后 `evolution-evaluation-bind`。缺输入先组织/补齐输入，不能只记录“等待 adapter”。未知提交先查收据与副作用，禁止重放；不得把 Native 根的普通 review 收据注入为独立 final truth。工程 bug 修复和领域收益分别验收，自动 promotion 设置不因本任务自动开启。
 
+## 实际执行与后续入口
+
+系统项的 evidence_build_actions 给出变更驱动的待补事实；outcome_followups
+只列有稳定来源和明确到期条件的待观察项。按
+[执行集成](implementation/skill-rsi-2026-10-16/README.md) 使用现有 native-family
+prepare/dispatch/collect/result 入口，真实原生工具由当前根和原 Provider owner
+准入，不能以 shell LLM 或签名字段冒充执行。先冻结任务/父子包/工具/权限/
+oracle/split/全部尝试预算；独立 final 不交 proposer，已暴露 selection 不能
+反复用于认证。原始收据和全文保留私有，未知成本/作用不重放、不补零。
+
+原 owner 多文件能力缺失时保留 OWNER_PACKAGE_TRANSACTION_UNAVAILABLE，准备
+该 owner 的最小扩展与真实隔离验证，再由有权限的根裁决；不得连续调用单文件
+安装器伪装原子包。cohort 与 method 通过同一账本和本流程接续；无新输入或样本
+不启动模型。自然来源必须独立证明，历史 user_run、维护、评测或 canary 不回填
+为自然增益。方法生成与方法下游比较分别核验。
+
 ## 每批必查：本项目是否在改善 Skill
 
 系统项不是 daemon 健康检查。至少核对以下链路及反例：
@@ -40,7 +56,7 @@
 | 环节 | 要回答的问题与失败时行动 |
 |---|---|
 | 发现与身份 | 新会话是否被发现、子/中断身份是否正确、未知格式是否可见；修 adapter 和范围内遗漏，保留覆盖分母 |
-| 事实与审阅 | 是否只有事件 ID、长期 `DIAGNOSTIC_FACTS_REQUIRED`、无效 schema 或耗尽的尝试；从真实会话提取选定事实，经 `review-evidence-import` 绑定精确 run/version，核对漂移与重放门 |
+| 事实与审阅 | 是否只有事件 ID、长期 `DIAGNOSTIC_FACTS_REQUIRED`、无效 schema 或耗尽的尝试；从真实会话提取选定事实，通过 `evidence-plan` 精选目标与事实，经 `evidence-build` 绑定精确 run/version/来源/覆盖；旧 `review-evidence-import` 只作兼容入口，核对漂移与重放门 |
 | 候选与安装 | 有支持的发现是否实际产生原 owner 候选、独立评测、可恢复应用；检查首个断点，修本项目代码/配置或完成根负责的输入，不以空 callback/连接器声称自治 |
 | 后续使用与效果 | 安装后新上下文是否加载并验收；自然任务是否复发，失败/返工/接管/时间/全部成本与父版本是否可比；无样本时安排明确 follow-up，不假称提升 |
 | 方法递归 | 改进策略的精确版本是否生成下一代候选、有独立下游比较和全部探索成本；仅重复运行或修了本项目仍是 UNVERIFIED |

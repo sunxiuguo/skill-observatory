@@ -2,7 +2,7 @@
 from __future__ import annotations
 import json
 import re
-from .store import canonical, digest
+from .store import canonical, digest, now
 
 CODE = re.compile(r'^[A-Za-z0-9_.:-]{1,120}$')
 
@@ -35,10 +35,16 @@ def attach_evidence(store, value):
     """Trusted local ingress, absent from HTTP; only redacted selected facts."""
     from .runtime import redact
     required={'run_id','goal','success_criteria','owner','version_id','result','steps','receipt_sha256'}
-    if set(value)!=required or len(canonical(value))>12000 or redact(value)!=value:
+    versioned=value.get('schema_version')==2
+    extra={'schema_version','run_binding','package_digest','environment_binding','artifact_refs','actual_terminal','source_class','coverage','attempt_refs','policy_digest','source_fingerprint','builder_version','local_refs'} if versioned else set()
+    if set(value)!=required|extra or len(canonical(value))>24000 or redact(value)!=value:
         raise ValueError('EVIDENCE_CAPSULE_CONTRACT_INVALID')
     run=store.get('runs',value['run_id'])
     if not run:raise ValueError('RUN_NOT_FOUND')
+    if versioned:
+        outbound={k:v for k,v in value.items() if k!='local_refs'}
+        if re.search(r'/Users/|/home/|/private/|[A-Z]:\\',canonical(outbound).decode()):raise ValueError('EVIDENCE_PRIVATE_PATH_REJECTED')
+        _validate_v2(store,run,value)
     for k in ('goal','success_criteria'):
         if not isinstance(value[k],str) or not 0<len(value[k])<=1600:raise ValueError('EVIDENCE_TEXT_INVALID')
     if not all(isinstance(value[k],str) and CODE.fullmatch(value[k]) for k in ('owner','version_id')):
@@ -100,7 +106,154 @@ def build_capsule(store,run):
             if row:
                 import json
                 event=store.event_data(row[0],db);events.append({k:event[k] for k in ('id','event','tool_name','tool_use_id','source','occurred_at') if k in event})
-    value={'schema_version':1,'run_id':run['id'],'facts':facts,'events':events,
+    if facts and facts.get('schema_version')==2:
+        # Paths/local source material remain private; external owner admission is
+        # checked against the actual capsule version, never a v1 fallback.
+        facts={k:v for k,v in facts.items() if k not in {'local_refs'}}
+    value={'schema_version':2 if facts and facts.get('schema_version')==2 else 1,'run_id':run['id'],'facts':facts,'events':events,
            'coverage':'selected_redacted_facts_only','missing':missing,'outcome_truth':'runtime_only_unverified'}
     if len(canonical(value))>16000:raise ValueError('EVIDENCE_CAPSULE_TOO_LARGE')
     return value
+
+
+BUILDER_VERSION = 'evidence-builder-v2'
+
+
+def project_run_evidence(store, run):
+    """Deterministic, local-only facts. No inferred goals or success labels."""
+    from pathlib import Path
+    cwd=Path(run.get('cwd') or '.').resolve()
+    from .transcripts import _inside_scope
+    if not _inside_scope(store,cwd):raise ValueError('OUTSIDE_SCOPE')
+    events=[]
+    with store.connect() as db:
+        for eid in run.get('event_ids',[]):
+            row=db.execute('SELECT data FROM events WHERE id=?',(eid,)).fetchone()
+            if not row:raise ValueError('EVIDENCE_EVENT_MISSING')
+            event=store.event_data(row[0],db)
+            if Path(event['cwd']).resolve()!=cwd:raise ValueError('EVIDENCE_SOURCE_CWD_DRIFT')
+            h=store.artifact(canonical(event))
+            events.append({**{k:event[k] for k in ('id','event','tool_name','tool_use_id','source','source_sequence','transcript_record_sha256','occurred_at','diagnostic_fact') if k in event},'event_sha256':h})
+    execution=run.get('execution_session_id',run.get('session_id'))
+    gaps=[g for g in store.list('transcript_gaps') if g.get('execution_session_id')==execution and
+          (g.get('turn_id') is None or g.get('turn_id')==run.get('turn_id'))]
+    coverage=[{'kind':'observed_receipts_only','global_denominator':None}]
+    if gaps:coverage.append({'kind':'semantic_gap','gap_ids':[g['id'] for g in gaps],'status':'incomplete'})
+    origin=run.get('origin')
+    source_class='child' if run.get('agent_id') else {'review':'maintenance','maintenance':'maintenance','candidate_dev':'evaluation','final_eval':'evaluation','activation_canary':'canary'}.get(origin,'unknown')
+    terminal=[e for e in events if e['event'] in {'Stop','SessionEnd','SubagentStop','Interrupt'}]
+    actual={'event':terminal[-1]['event'] if terminal else None,'event_id':terminal[-1]['id'] if terminal else None,
+            'truth':'runtime_only_unverified','result_status':'interrupted' if terminal and terminal[-1]['event']=='Interrupt' else 'unknown'}
+    policy=digest(canonical({'builder':BUILDER_VERSION,'scopes':store.settings().get('scopes'),
+                              'diagnostic_scopes':store.settings().get('diagnostic_scopes',[]),'privacy':'selected_redacted_only-v2'}))
+    binding={k:run.get(k) for k in ('id','session_id','execution_session_id','turn_id','agent_id','origin')}
+    source_manifest=store.artifact(canonical({'binding':binding,'events':events,'gaps':gaps}))
+    fingerprint=digest(canonical({'source_manifest':source_manifest,'policy':policy}))
+    return {'run_binding':binding,'source_event_manifest_sha256':source_manifest,'events':events[-24:],'actual_terminal':actual,'source_class':source_class,'coverage':coverage,
+            'source_fingerprint':fingerprint,'policy_digest':policy,'builder_version':BUILDER_VERSION}
+
+
+def _validate_v2(store,run,value):
+    projection=project_run_evidence(store,run)
+    for field in ('run_binding','source_fingerprint','policy_digest','source_class','actual_terminal','coverage','builder_version'):
+        if value[field]!=projection[field]:raise ValueError('EVIDENCE_SOURCE_BINDING_DRIFT')
+    version=store.get('capability_versions',value['version_id'])
+    if not version or value['package_digest']!=version['package_sha256']:raise ValueError('EVIDENCE_PACKAGE_DRIFT')
+    if value['local_refs']!=[{'sha256':projection['source_event_manifest_sha256'],'kind':'event_manifest'}]:
+        raise ValueError('EVIDENCE_LOCAL_REFERENCE_DRIFT')
+    for ref in value['local_refs']+value['artifact_refs']:
+        if not isinstance(ref,dict) or set(ref)!={'sha256','kind'} or not CODE.fullmatch(ref['kind']):raise ValueError('EVIDENCE_REFERENCE_INVALID')
+        store.read_artifact(ref['sha256'])
+    # Unknown environment is explicit. Operator-selected values need provenance;
+    # this builder cannot derive a model/effort from a guessed default.
+    env=value['environment_binding']
+    if not isinstance(env,dict) or set(env)!={'model','effort','harness','runtime','evidence_sha256','missing'}:raise ValueError('EVIDENCE_ENVIRONMENT_INVALID')
+    if env['evidence_sha256'] is None:
+        if any(env[k] is not None for k in ('model','effort','harness','runtime')) or not env['missing']:raise ValueError('EVIDENCE_ENVIRONMENT_UNVERIFIED')
+    else:
+        proof=json.loads(store.read_artifact(env['evidence_sha256']))
+        if proof.get('run_binding')!=projection['run_binding'] or any(proof.get(k)!=env[k] for k in ('model','effort','harness','runtime')):
+            raise ValueError('EVIDENCE_ENVIRONMENT_UNVERIFIED')
+    from .final_gate import COST_KINDS
+    for ref in value['attempt_refs']:
+        if not isinstance(ref,dict) or set(ref)!={'kind','id','sha256'} or ref['kind'] not in COST_KINDS:raise ValueError('EVIDENCE_ATTEMPT_REFERENCE_INVALID')
+        item=store.get(ref['kind'],ref['id'])
+        if not item or digest(canonical(item))!=ref['sha256']:raise ValueError('EVIDENCE_ATTEMPT_DRIFT')
+    if any(x.get('kind')=='semantic_gap' for x in value['coverage']) and value['result']['status']=='completed':
+        raise ValueError('EVIDENCE_GAP_PREVENTS_SUCCESS_CLAIM')
+
+
+def evidence_plan(store, run_id=None, limit=8):
+    """Bounded durable sweep; an epoch's fixed ceiling cannot chase arrivals.
+
+    Explicit selection remains idempotent. Automatic discovery advances even
+    over built/blocked rows, including at limit=1 and after a process restart.
+    The cursor and discovered work commit together in the original ledger.
+    """
+    if not 1<=limit<=50:raise ValueError('EVIDENCE_PLAN_LIMIT_INVALID')
+    with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        scan=None
+        if run_id:
+            run=store.get('runs',run_id,db)
+            if not run:raise ValueError('RUN_NOT_FOUND')
+            runs=[run]
+        else:
+            scan=store.get('source_configuration','evidence_sweep',db) or {'id':'evidence_sweep','cursor':0,'ceiling':0}
+            if scan['cursor']>=scan['ceiling']:
+                ceiling=db.execute("SELECT COALESCE(MAX(rowid),0) FROM entities WHERE kind='runs'").fetchone()[0]
+                scan={**scan,'cursor':0,'ceiling':ceiling}
+            rows=db.execute("SELECT rowid,data FROM entities WHERE kind='runs' AND rowid>? AND rowid<=? AND json_extract(data,'$.terminal')=1 ORDER BY rowid LIMIT ?",
+                            (scan['cursor'],scan['ceiling'],limit)).fetchall()
+            runs=[json.loads(row['data']) for row in rows]
+            scan['cursor']=rows[-1]['rowid'] if len(rows)==limit else scan['ceiling']
+        result=_plan_runs(store,runs,db,explicit=bool(run_id))
+        if scan is not None:store.put('source_configuration',scan,db)
+        return result
+
+
+def _plan_runs(store,runs,db,*,explicit):
+    result=[]
+    for run in runs:
+        try:projection=project_run_evidence(store,run)
+        except (ValueError,KeyError,OSError) as ex:
+            if explicit:raise
+            code=str(ex) if isinstance(ex,ValueError) and CODE.fullmatch(str(ex)) else 'EVIDENCE_SOURCE_READBACK_REQUIRED'
+            fingerprint=digest(canonical([run,store.settings().get('scopes'),code]))
+            id_='facts_blocked_'+fingerprint[:32]
+            row=store.get('evidence_builds',id_,db) or {'id':id_,'run_id':run['id'],'source_fingerprint':fingerprint,
+                 'status':'blocked','missing':[code],'observed_version_ids':[],'source_class':'unknown','created_at':now(),'model_attempts':0}
+            store.put('evidence_builds',row,db);result.append(row);continue
+        id_='facts_'+digest(canonical([run['id'],projection['source_fingerprint'],BUILDER_VERSION,projection['policy_digest']]))[:32]
+        old=store.get('evidence_builds',id_,db)
+        if old:
+            if explicit or old['status']!='built':result.append(old)
+            continue
+        version_ids=sorted({u['version_id'] for u in store.list('capability_invocations') if
+                            u.get('session_id')==run.get('execution_session_id',run.get('session_id')) and u.get('turn_id')==run.get('turn_id') and 'verified_read' in u.get('stages',[])})
+        row={'id':id_,'run_id':run['id'],**projection,'observed_version_ids':version_ids,
+             'status':'awaiting_native_selection','missing':['TASK_GOAL_REQUIRED','SUCCESS_CRITERIA_REQUIRED']+([] if version_ids else ['OBSERVED_CAPABILITY_VERSION_REQUIRED']),
+             'created_at':now(),'model_attempts':0}
+        store.put('evidence_builds',row,db);result.append(row)
+    return result
+
+
+def build_selected_evidence(store, selection):
+    """Thin trusted Native selection ingress, sharing attach_evidence safety/CAS."""
+    allowed={'run_id','goal','success_criteria','owner','version_id','result','steps','receipt_sha256','artifact_refs','attempt_refs','environment_binding'}
+    if not isinstance(selection,dict) or set(selection)-allowed or not allowed-{'artifact_refs','attempt_refs','environment_binding'}<=set(selection):raise ValueError('EVIDENCE_SELECTION_INVALID')
+    plan=evidence_plan(store,selection['run_id'])[0]
+    version=store.get('capability_versions',selection['version_id'])
+    if not version:raise ValueError('EVIDENCE_OWNER_VERSION_MISMATCH')
+    value={**selection,'schema_version':2,**{k:plan[k] for k in ('run_binding','actual_terminal','source_class','coverage','source_fingerprint','policy_digest','builder_version')},
+           'package_digest':version['package_sha256'],'artifact_refs':selection.get('artifact_refs',[]),'attempt_refs':selection.get('attempt_refs',[]),
+           'environment_binding':selection.get('environment_binding',{'model':None,'effort':None,'runtime':None,'harness':None,'evidence_sha256':None,'missing':['ENVIRONMENT_NOT_OBSERVED']}),
+           'local_refs':[{'sha256':plan['source_event_manifest_sha256'],'kind':'event_manifest'}]}
+    h=store.artifact(canonical(value))
+    if plan.get('selection_sha256'):
+        if plan['selection_sha256']!=h:raise ValueError('EVIDENCE_BUILD_ALREADY_SELECTED')
+        return store.get('run_evidence',selection['run_id'])
+    receipt=attach_evidence(store,value)
+    plan.update(status='built',missing=[],selection_sha256=h,completed_at=now())
+    store.put('evidence_builds',plan)
+    return receipt

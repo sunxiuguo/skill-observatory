@@ -105,6 +105,7 @@ class EvolutionPipeline:
         # by another token cannot be safely replayed after a process restart.
         self.claim_token = uuid.uuid4().hex
         self._tick_mutex = threading.Lock()
+        self._explicit_installation=None
 
     @classmethod
     def state_names(cls):
@@ -114,12 +115,13 @@ class EvolutionPipeline:
     def reason_codes(cls):
         return REASON_CODES
 
-    def tick(self):
+    def tick(self, *, explicit_installation=None):
         # Serialize the entire callback-bearing tick across processes.  A busy
         # tick is live progress and must not recover or replay its stage.
         if not self._tick_mutex.acquire(blocking=False):
             return None
         try:
+            self._explicit_installation=explicit_installation
             lock_path = self.store.root / "pipeline.lock"
             with lock_path.open("a") as lock_file:
                 try:
@@ -131,6 +133,7 @@ class EvolutionPipeline:
                 finally:
                     fcntl.flock(lock_file, fcntl.LOCK_UN)
         finally:
+            self._explicit_installation=None
             self._tick_mutex.release()
 
     def _tick_locked(self):
@@ -167,6 +170,7 @@ class EvolutionPipeline:
             ready = self._ready_states()
             candidates = [
                 stage for stage in stages if stage.get("state") in ready and self._adapter_for(stage)
+                and (not self._explicit_installation or (stage['id']==self._explicit_installation and stage['state']==STATE_PROMOTION_READY))
             ]
             if candidates:
                 stage = sorted(
@@ -187,6 +191,7 @@ class EvolutionPipeline:
                 key=lambda item: (item.get("created_at") or "", item["id"]),
             )
             existing = {stage.get("review_id") for stage in stages}
+            if self._explicit_installation:return None
             for review in reviews:
                 if review.get("id") in existing:
                     continue
@@ -376,10 +381,15 @@ class EvolutionPipeline:
         cost_attempt_ids = result.get("cost_attempt_ids")
         parent, _skill = self._current_parent(stage)
         candidate_sha256 = digest(candidate_bytes)
+        if result.get('generation_id'):
+            from .outcomes import validate_method_generation
+            validate_method_generation(self.store,result.get('proposer_method_version_id'),result['generation_id'],(result.get('candidate_package') or {}).get('package_digest',candidate_sha256))
         result_record = {
             "candidate_sha256": candidate_sha256,
             "owner_incident_id": result["owner_incident_id"],
             "proposer_method_version_id": result.get("proposer_method_version_id"),
+            "generation_id": result.get("generation_id"),
+            "method_lineage_status": "verified_generation" if result.get("generation_id") else "declared_unverified",
             "cost_attempt_ids": result.get("cost_attempt_ids"),
         }
         result_sha256 = self.store.artifact(canonical(result_record))
@@ -388,6 +398,7 @@ class EvolutionPipeline:
                 {
                     "experiment_id": stage["id"],
                     "candidate_sha256": candidate_sha256,
+                    "candidate_package_digest":(result.get('candidate_package') or {}).get('package_digest'),
                 }
             )
         )[:32]
@@ -397,11 +408,13 @@ class EvolutionPipeline:
             "review_id": stage["review_id"],
             "review_binding_sha256": stage["review_binding_sha256"],
             "skill_id": stage["skill_id"],
-            "target": stage["target"],
+            "target": stage.get('target_root',stage["target"]),
             "parent_sha256": stage["parent_sha256"],
             "candidate_sha256": candidate_sha256,
             "parent_artifact_sha256": stage["parent_artifact_sha256"],
             "candidate_artifact_sha256": self.store.artifact(candidate_bytes),
+            "generation_id":result.get('generation_id'),
+            "proposer_method_version_id":result.get('proposer_method_version_id'),
             "authority_id": stage["authority_id"],
             "owner_incident_id": result["owner_incident_id"],
             **(
@@ -413,6 +426,8 @@ class EvolutionPipeline:
             "status": STATE_CANDIDATE_READY,
             "created_at": now(),
         }
+        if result.get('parent_package') or result.get('candidate_package'):
+            candidate.update(parent_package=result['parent_package'],candidate_package=result['candidate_package'],package_request_id=result['package_request_id'])
         return self._finish(
             stage,
             {
@@ -464,7 +479,14 @@ class EvolutionPipeline:
         ):
             self._hold(stage, "PROPOSAL_OUTPUT_INVALID")
             raise ValueError("PROPOSAL_OUTPUT_INVALID")
-        if candidate_sha256 == stage["parent_sha256"]:
+        packaged=bool(result.get('parent_package') or result.get('candidate_package'))
+        if packaged:
+            from .packages import read_package,changed_files
+            before=result['parent_package'];after=result['candidate_package'];grant=self.store.get('authority_grants',stage['authority_id']) or {}
+            old_files=read_package(self.store,before);new_files=read_package(self.store,after)
+            if stage.get('parent_package')!=before or old_files.get('SKILL.md')!=parent or new_files.get('SKILL.md')!=candidate_bytes:raise ValueError('OWNER_PACKAGE_BINDING_DRIFT')
+            if not changed_files(self.store,before,after,grant.get('changed_files',[])):raise ValueError('CANDIDATE_NO_CHANGE')
+        if not packaged and candidate_sha256 == stage["parent_sha256"]:
             self._hold(stage, "CANDIDATE_NO_CHANGE")
             raise ValueError("CANDIDATE_NO_CHANGE")
         return candidate_bytes
@@ -495,6 +517,11 @@ class EvolutionPipeline:
                 "skill_id": stage["skill_id"],
             },
         }
+        if candidate.get('candidate_package'):
+            from .packages import read_package
+            before=read_package(self.store,candidate['parent_package']);after=read_package(self.store,candidate['candidate_package'])
+            if sum(map(len,before.values()))+sum(map(len,after.values()))>MAX_EVALUATOR_BYTES:return self._hold(stage,'EVALUATOR_INPUT_BUDGET_EXCEEDED')
+            payload.update(parent_package=candidate['parent_package'],candidate_package=candidate['candidate_package'],parent_files=before,candidate_files=after,target=candidate['target'])
         intent = {
             "operation": "evaluate",
             "candidate_id": candidate["id"],
@@ -583,7 +610,7 @@ class EvolutionPipeline:
             "candidate_sha256": candidate["candidate_sha256"],
         }
         stage = self._prepare_intent(stage, intent)
-        installation = SkillEvolutionInstaller().apply(
+        installation = (getattr(self,'original',None) or SkillEvolutionInstaller()).apply(
             self.store, candidate["id"]
         )
         expected_id = "owner_inst_" + candidate["id"]
@@ -591,16 +618,20 @@ class EvolutionPipeline:
             not isinstance(installation, dict)
             or installation.get("id") != expected_id
             or installation.get("candidate_id") != candidate["id"]
-            or installation.get("target") != candidate["target"]
+            or installation.get("target") != (str(Path(candidate['target'])/AUTHORIZED_FILE) if candidate.get('candidate_package') else candidate['target'])
             or installation.get("before_sha256") != candidate["parent_sha256"]
             or installation.get("after_sha256") != candidate["candidate_sha256"]
             or installation.get("status") != STATE_ACTIVATION_PENDING
         ):
             return self._hold(stage, "INSTALLER_RESULT_INVALID")
         try:
-            target = Path(candidate["target"])
+            target = Path(candidate["target"])/AUTHORIZED_FILE if candidate.get('candidate_package') else Path(candidate['target'])
             if target.is_symlink() or digest(target.read_bytes()) != candidate["candidate_sha256"]:
                 return self._hold(stage, "INSTALLATION_BINDING_MISMATCH")
+            if candidate.get('candidate_package'):
+                from .packages import snapshot_package
+                if installation.get('before_package')!=candidate['parent_package'] or installation.get('after_package')!=candidate['candidate_package'] or snapshot_package(self.store,candidate['target'])!=candidate['candidate_package']:
+                    return self._hold(stage,'INSTALLATION_BINDING_MISMATCH')
         except OSError:
             return self._hold(stage, "INSTALLATION_BINDING_MISMATCH")
         return self._finish(
@@ -663,7 +694,7 @@ class EvolutionPipeline:
             or candidate.get("review_id") != stage["review_id"]
             or candidate.get("review_binding_sha256")
             != stage["review_binding_sha256"]
-            or candidate.get("target") != stage["target"]
+            or candidate.get("target") != stage.get('target_root',stage["target"])
             or candidate.get("parent_sha256") != stage["parent_sha256"]
         ):
             self._hold(stage, "INSTALLATION_BINDING_MISMATCH")
@@ -679,6 +710,9 @@ class EvolutionPipeline:
             from .runtime import package_manifest
 
             manifest = package_manifest(skill["path"])
+            if stage.get('parent_package'):
+                from .packages import snapshot_package
+                if snapshot_package(self.store,stage['target_root'])!=stage['parent_package']:raise ValueError('PARENT_PACKAGE_DRIFT')
             target = Path(stage["target"])
             if (
                 manifest != skill.get("manifest")

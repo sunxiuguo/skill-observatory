@@ -76,6 +76,8 @@ def spool(store, payload, source="codex-hook"):
         except (ValueError,TypeError,AttributeError):pass
     if type(payload.get('source_sequence')) is int and payload['source_sequence']>=0:
         body['source_sequence']=payload['source_sequence']
+    if source in {'codex-desktop','codex-cli','codex-subagent'} and payload.get('transcript_record_sha256'):
+        body['transcript_record_sha256']=payload['transcript_record_sha256']
     # Persist minimum metadata, not prompt, command or output. Bind original redacted
     # event hash for collision diagnosis; identities provided upstream win.
     body['input_sha256']=digest(canonical(redact(payload)))
@@ -206,7 +208,10 @@ def ingest(store,limit=512):
         except Exception as ex:
             atomic_write(store.root/'quarantine'/p.name,canonical({"reason_code":str(ex),"sha256":digest(p.read_bytes())}))
             p.rename(store.root/'quarantine'/('raw-'+p.name))
-    if count:reconcile_session_ends(store)
+    if count:
+        reconcile_session_ends(store)
+        from .evidence import evidence_plan
+        evidence_plan(store,limit=4)
     return count
 
 
@@ -323,7 +328,7 @@ def progress(store,lane,phase,successful=False,**fields):
 
 
 def collect(store):
-    from .transcripts import observe_session
+    from .transcripts import observe_session, resolve_selected
     # Drain durable deliveries before following transcripts; one large appended
     # session must not delay the entire existing spool behind a full catalog pass.
     n=ingest(store)
@@ -338,6 +343,7 @@ def collect(store):
     selected_batch=(sessions[start:]+sessions[:start])[:8]
     store._collect_cursor=start+len(selected_batch)
     for selected in selected_batch:
+        if selected.get('relocated_to'):continue
         if selected.get('eligible_at',0)>time.time():continue
         if selected.get('closed'):
             cursor=store.get('cursors','cursor_'+digest(str(Path(selected['path']).resolve()).encode())[:24]) or {}
@@ -347,6 +353,8 @@ def collect(store):
                 pass  # The normal adapter error/backoff below owns missing paths.
         progress(store,'daemon','transcripts',selected_session_id=selected['id'])
         try:
+            selected=resolve_selected(store,selected)
+            if selected.get('relocation_pending'):continue
             observe_session(store,selected['path'],selected['session_id'],selected['source'])
         except Exception as ex:
             # One cause/session/version record, bounded retry; not one error per tick.
@@ -397,6 +405,8 @@ def state(store):
     reviewed=sum(x['status']=='reviewed' for x in d['reviews'])
     daemon=store.get('runtime','daemon') or {}
     d['metrics']={"observed_runs":len(d['runs']),"reviewed_runs":reviewed,"triaged_runs":sum(x['status']=='triaged' for x in d['reviews']),"global_coverage":None,"coverage_reason":"GLOBAL_DENOMINATOR_UNKNOWN","queued_jobs":sum(x['status']=='queued' for x in d['jobs']),"daemon_running":time.time()-daemon.get('heartbeat',0)<30,"window_start":min((x['created_at'] for x in d['runs']),default=None),"window_end":now()}
+    from .semantic_progress import project
+    d['semantic_progress']=project(store)
     d['runtime']=store.list('runtime');d['revision']=store.revision()
     d['capabilities']={"semantic_review":(store.get('runtime','reviewer') or {}).get('status','unconfigured'),"strong_sandbox":"requires_current_environment_receipt","promotion":"requires_frozen_independent_final","hook_trust":"native_review_required","recursive_gain":"UNVERIFIED"}
     return d

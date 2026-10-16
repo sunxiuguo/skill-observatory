@@ -1,3 +1,100 @@
+# RSI integration — source stage accepted, 2026-10-17
+
+The implementation candidate connects bounded collection recovery, versioned
+Native-selected facts, actual native task-family execution, strict per-case and
+all-attempt final reconciliation, full package identity, original-owner mapping,
+natural cohorts and real method lineage. Material stage progress is separate
+from worker heartbeats. Independent review accepted this source stage for the
+already authorized Git delivery. Full engineering acceptance remains partial;
+the existing user service has not been updated by this iteration.
+
+| Layer | Current conclusion |
+|---|---|
+| Source stage | Accepted after independent F1–F16, installed-candidate/late-unknown-cost probes, 76 focused regressions and complete source/evidence identity readback |
+| Complete engineering chain | Partial: independent final/budget, global original-owner package capability, reviewer v2 authority/qualification and actual daily-owner follow-up remain open |
+| Live deployment | Not updated |
+| Skill gain | HOLD |
+| Natural user gain | UNKNOWN |
+| Method RSI | UNVERIFIED |
+
+Source acceptance authorizes this project's precise Git closeout; the actual
+remote commit and applicable final-head CI are checked separately. It does not
+authorize global owner/reviewer application, production deployment, a new model
+attempt, a larger consumed budget or reuse of exposed final inputs.
+
+An isolated copy of a real authorized task produced a v2 capsule without changing
+the production ledger. An exposed CLI selection pilot ran both immutable historical
+Skill packages in fresh native contexts under the same admitted model/maximum
+verified effort. Both produced the same valid command. The frozen oracle's exact
+evidence-list expectation rejected an additional valid evidence kind; those labels
+are retained, rather than adjusted against consumed feedback. No difference gain
+was observed. Independent final truth, enough cases and known monetary cost are
+absent, and measured token usage exceeded the frozen cost ceiling. No promotion,
+natural user gain or RSI certification follows from this pilot.
+
+The actual original single-file installer was exercised in isolation, including
+prepared interruption/recovery, readback, idempotency, rollback and drift refusal.
+A minimal extension of that original owner, using atomic whole-directory exchange,
+was also prepared and tested through the thin Observatory adapter in isolation.
+It remains unapplied globally. The installed original owner's missing package
+transaction capability is an explicit dependency, not a passed production gate.
+The inspected existing reviewer owner admits capsule v1; v2 needs matching data
+authority and fresh schema qualification against the changed reviewer. Refusal
+tests prevent borrowing the older authority or dispatching an unapproved v2 call.
+
+See [the execution integration](implementation/skill-rsi-2026-10-16/README.md) for
+portable ingress, safety and follow-up contracts. Engineering checks are recorded
+at candidate handoff; final Git/CI delivery follows independent acceptance.
+Skill gain remains HOLD, natural gain UNKNOWN, and method RSI UNVERIFIED.
+
+## Independent acceptance repairs — 2026-10-17
+
+The revised candidate binds current native contexts and domain-owner execution
+evidence, freezes both natural-cohort versions and per-task cost inventories,
+advances a persistent bounded facts sweep, and scans growing large sources from
+fixed private filesystem views. Final reuse rechecks exact inputs, runtime
+attempt relationships and explicit terminal states. Special file mode bits and
+nonregular package types refuse. Material progress follows actual HOLD/pending
+work and readable bilingual actions.
+
+A supported package request/proposal/pipeline flow was exercised with an
+unchanged SKILL.md and a changed reference, 16 actual isolated container arms,
+the prepared original-owner transaction, readback, fresh deterministic process
+activation and rollback. Automatic promotion stayed disabled. Method comparison
+now separates a design registered before generation from real output bindings
+and the later final protocol; finite actual subprocess fixtures cover that
+order. These are engineering fixtures, not evidence of Skill or recursive gain.
+
+The current execution manifest now binds every file's exact supported mode
+through the Docker loader's actual readback, Native collection, final
+reconciliation and original-owner installation. Cached final usability rechecks
+disk/package identity and expiring authority, while keeping historical signed
+acceptance and final consumption. A matching original-owner installation or
+prepared intent can explain the exact candidate bytes without a new experiment.
+
+Natural samples bind a signed logical task identity and actual execution source;
+receipt aliases and retries cannot increase an independent denominator or bill
+the same task twice. Duplicate history remains visible and incomplete. Method
+comparisons include the plan's full typed exploration/source/retry cost closure
+and frozen budget. Current reports recheck method and downstream final validity;
+historical verified facts do not preserve a revoked green status.
+
+Validation and final package/clean-install identities are recorded in the
+private revised handoff. Local validation passed 293 backend tests with required
+Docker execution and zero skips, plus 9 actual API/DOM checks. The independent
+review accepted the source stage, while complete engineering acceptance remains
+partial. The installed global owner/reviewer and existing
+user service are unchanged; v2 data authority/qualification and owner package
+application remain separate dependencies. The daily-owner follow-up is a prepared
+handoff and has not been imported into the production workflow. A new
+current-protocol Native pair
+actually read the frozen historical packages, used two tools per arm and passed
+the parse-only task. Both produced an equivalent valid command, with no gain.
+Measured use was 264,147 tokens against the unchanged 30,000-token policy; it
+remains HOLD, alongside exposed/one-case/independent-truth and monetary-cost gaps.
+The native spawn surface has no per-child input-token hard cap. No retries,
+budget increase, reuse of the old final or revised consumed labels occurred.
+
 # First scheduled review and repairs — 2026-10-16
 
 The first daily heartbeat actually triggered. Its bounded review found fresh

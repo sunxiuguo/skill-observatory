@@ -103,6 +103,20 @@ There is no LLM extraction on every Stop and no new scheduler. See the complete
 Creation functional acceptance does not certify improvement over an existing
 method. Existing signed final/activation/live-outcome gates remain unchanged.
 
+## Factual input and task-family execution
+
+Changed terminal inputs create bounded factual work items. `evidence-plan` and
+`evidence-build` bind Native-selected goals and facts to exact source/version
+manifests without exporting raw transcripts. The native task-family bridge runs
+frozen historical packages using admitted native tools, and the v2 final kernel
+reconciles actual case/arm outputs and typed all-attempt costs. See the
+[execution integration](docs/implementation/skill-rsi-2026-10-16/README.md) for
+CLI ingress, package/owner dependencies, natural cohorts and method lineage.
+The first exposed pilot produced equivalent valid commands, with an overstrict
+oracle, insufficient independent samples and unresolved cost gates; it certifies
+no gain. The current installed generic owner still needs its separately authorized
+package transaction extension. Existing user service deployment is separate.
+
 ## Semantic review and owner integration
 
 For unattended recent-chat review and repair of both Skills and this project,

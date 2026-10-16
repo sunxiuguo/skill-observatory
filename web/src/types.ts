@@ -175,7 +175,17 @@ export interface PaginationInfo {
   limit: number;
 }
 
+export interface SemanticProgressState {
+  schema_version: number;
+  stages: {id: string; observed_count: number | null; last_material_at: string | null; age_seconds: number | null; next_action: string}[];
+  first_blocker: string | null;
+  pending_facts: number; unknown_attempts: number; semantic_gaps: number; pending_followups: number;
+  coverage: string; global_denominator: number | null; next_action: string;
+  claim_layers: {skill_gain: string; natural_gain: string; method_rsi: string};
+}
+
 export interface ObservatoryState {
+  semantic_progress?: SemanticProgressState;
   revision?: string | number;
   pagination?: Partial<Record<string, PaginationInfo>>;
   skills: Skill[];

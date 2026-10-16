@@ -11,7 +11,8 @@
     "docs/CONFIGURATION.md",
     "docs/CAPABILITY_LIFECYCLE.md",
     "docs/LIFECYCLE_HANDOFF_PROMPT.md",
-    "docs/PROACTIVE_REVIEW.md"
+    "docs/PROACTIVE_REVIEW.md",
+    "docs/implementation/skill-rsi-2026-10-16/README.md"
   ],
   "objectives": {
     "O1": {
@@ -19,7 +20,8 @@
         "src/skill_observatory/runtime.py",
         "src/skill_observatory/transcripts.py",
         "src/skill_observatory/review_worker.py",
-        "src/skill_observatory/proactive.py"
+        "src/skill_observatory/proactive.py",
+        "src/skill_observatory/evidence.py"
       ],
       "tests": [
         "tests/test_kernel.py::test_outside_scope_no_private_spool",
@@ -29,7 +31,9 @@
         "tests/test_transcript_reliability.py::test_certified_app_child_nested_identity_and_exact_future_rejection",
         "tests/test_runtime_reliability.py::test_session_end_uses_source_time_and_no_time_stays_envelope",
         "tests/test_proactive.py::test_index_is_readonly_and_outside_transcript_is_never_opened",
-        "tests/test_proactive.py::test_pending_survives_restart_and_partial_receipt_never_discards_work"
+        "tests/test_proactive.py::test_pending_survives_restart_and_partial_receipt_never_discards_work",
+        "tests/test_collection_recovery.py::test_9mib_gap_reaches_terminal_and_restart_never_double_consumes",
+        "tests/test_evidence_builder.py::test_selection_build_is_change_driven_private_and_version_bound"
       ]
     },
     "O2": {
@@ -38,7 +42,10 @@
         "src/skill_observatory/final_gate.py",
         "src/skill_observatory/installations.py",
         "src/skill_observatory/task_broker.py",
-        "src/skill_observatory/evidence.py"
+        "src/skill_observatory/evidence.py",
+        "src/skill_observatory/task_families.py",
+        "src/skill_observatory/packages.py",
+        "src/skill_observatory/evaluation.py"
       ],
       "tests": [
         "tests/test_pipeline.py::test_unsigned_verdict_refusal_does_not_reach_installer",
@@ -50,7 +57,13 @@
         "tests/test_task_broker.py::test_candidate_cannot_expand_broker_surface",
         "tests/test_final_consumption.py::test_atomic_batch_refusal_does_not_consume_new_sample",
         "tests/test_final_consumption.py::test_concurrent_protocols_claim_exactly_one_batch",
-        "tests/test_task_broker.py::test_actual_intersecting_final_cases_block_before_any_new_container"
+        "tests/test_task_broker.py::test_actual_intersecting_final_cases_block_before_any_new_container",
+        "tests/test_final_reconciliation.py::test_exact_positive_and_signed_999_totals_refused",
+        "tests/test_task_family_driver.py::test_same_final_input_is_consumed_before_native_tool_dispatch",
+        "tests/test_revision3_feedback.py::test_native_execution_boundary_rejects_full_mode_and_type_drift",
+        "tests/test_revision3_feedback.py::test_accepted_cache_rechecks_disk_and_natural_authority_expiry",
+        "tests/test_revision3_feedback.py::test_real_container_executes_exact_mode_only_package_difference",
+        "tests/test_revision3_feedback.py::test_final_rejects_resealed_trial_that_loaded_wrong_full_mode"
       ]
     },
     "O3": {
@@ -63,7 +76,12 @@
         "tests/test_outcomes.py::test_context_created_during_owner_apply_is_not_fresh",
         "tests/test_outcomes.py::test_legacy_install_time_unknown_stays_hold",
         "tests/test_outcomes.py::test_live_verification_refuses_current_disk_drift",
-        "tests/test_outcomes.py::test_later_user_run_records_as_of_readback_evidence"
+        "tests/test_outcomes.py::test_later_user_run_records_as_of_readback_evidence",
+        "tests/test_outcome_lineage.py::test_canary_cannot_enter_a_natural_denominator",
+        "tests/test_outcome_lineage.py::test_cohort_no_samples_stays_unknown_and_has_existing_daily_followup",
+        "tests/test_revision3_feedback.py::test_resigned_receipt_parallel_delivery_cannot_increase_natural_denominator",
+        "tests/test_revision3_feedback.py::test_same_context_distinct_turns_and_arms_count_but_retry_is_not_independent",
+        "tests/test_revision3_feedback.py::test_legacy_duplicate_history_is_visible_and_never_certifies_cost_or_coverage"
       ]
     },
     "O4": {
@@ -85,12 +103,14 @@
         "web/src/store.tsx",
         "web/src/Lifecycle.jsx",
         "scripts/test_web.py",
-        "web/src/paging.tsx"
+        "web/src/paging.tsx",
+        "src/skill_observatory/semantic_progress.py"
       ],
       "tests": [
         "web/src/state.test.jsx",
         "web/src/reliability.test.jsx",
-        "tests/test_paged_api.py::test_summary_pagination_filters_detail_and_revision"
+        "tests/test_paged_api.py::test_summary_pagination_filters_detail_and_revision",
+        "tests/test_semantic_progress.py::test_idle_health_is_not_material_progress"
       ]
     },
     "O6": {
@@ -111,7 +131,10 @@
       ],
       "tests": [
         "tests/test_evaluation.py::test_real_artifact_grading_and_synthetic_final_stays_hold",
-        "tests/test_proactive.py::test_changed_source_reopens_but_planning_does_not_enqueue_models"
+        "tests/test_proactive.py::test_changed_source_reopens_but_planning_does_not_enqueue_models",
+        "tests/test_outcome_lineage.py::test_bare_method_string_or_forged_generation_cannot_certify_rsi",
+        "tests/test_revision3_feedback.py::test_method_plan_includes_failed_unknown_and_interrupted_exploration",
+        "tests/test_revision3_feedback.py::test_method_report_rechecks_real_kernel_cost_revocation_and_preserves_history"
       ]
     }
   },
@@ -129,6 +152,7 @@
     "scripts/test_web.py",
     ".github/workflows/ci.yml",
     "docs/RELIABILITY.md",
-    "docs/PROACTIVE_REVIEW.md"
+    "docs/PROACTIVE_REVIEW.md",
+    "docs/implementation/skill-rsi-2026-10-16/README.md"
   ]
 }

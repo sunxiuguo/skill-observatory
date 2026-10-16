@@ -76,6 +76,8 @@ def audit(store, stamp):
             'jobs': jobs, 'adapter_causes_7d': adapters, 'pending_experiments': pending,
             'held_experiments': held, 'candidate_readiness': readiness,
             'more_candidate_readiness': len(unstarted) > 16, 'collector_coverage_gaps': coverage,
+            'evidence_build_actions': evidence_actions(store),
+            'outcome_followups': outcome_followups(store,stamp),
             'method_bound_candidates': method_bound, 'method_gain': 'UNVERIFIED',
             'workers': [{'id': lane, 'healthy': w['healthy'],
                          'reason_code': w.get('reason_code')} for lane, w in zip(LANES, health['workers'])],
@@ -93,14 +95,11 @@ def _source(row, store, index_parent=None):
     """Read metadata only after scope filtering. Unrecognized shapes remain visible."""
     path = Path(row['rollout_path'])
     signal = {'path': str(path)}
-    # Codex can archive a transcript without updating its index pointer. Resolve
-    # exactly one basename, then apply the same identity/schema/scope checks.
-    if not path.exists() and not path.is_symlink() and index_parent is not None:
-        archived = index_parent / 'archived_sessions' / path.name
-        if not archived.parent.is_symlink() and (archived.exists() or archived.is_symlink()):
-            path = archived
-            signal.update(path=str(path), indexed_path=row['rollout_path'])
     try:
+        from .transcripts import archive_path
+        resolved = archive_path(path, index_parent)
+        if resolved != path:signal.update(path=str(resolved), indexed_path=row['rollout_path'])
+        path = resolved
         if path.is_symlink() or not path.is_file():
             raise ValueError('TRANSCRIPT_NOT_REGULAR')
         stat = path.stat()
@@ -145,6 +144,7 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
     index_db = Path(index_db)
     if index_db.is_symlink() or not index_db.is_file():
         raise ValueError('CODEX_INDEX_REQUIRED')
+    store.put('source_configuration',{'id':'transcript_index','index_parent':str(index_db.resolve().parent),'index_path':str(index_db.resolve())})
     with store.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         current = store.get('proactive_review_batches', 'active', db)
@@ -342,3 +342,17 @@ def finish(store, batch_id, receipt, *, stamp=None):
                 'remaining': len(by_id) - len(results),
                 'source_changes': len(source_changes),
                 'claim': 'root_review_accounting_not_promotion_or_RSI_certification'}
+
+
+
+def evidence_actions(store):
+    with store.connect() as db:
+        rows=db.execute("SELECT data FROM entities WHERE kind='evidence_builds' AND json_extract(data,'$.status')!='built' ORDER BY json_extract(data,'$.created_at') LIMIT 4").fetchall()
+    return [{k:r[k] for k in ('id','run_id','source_fingerprint','status','missing','observed_version_ids')} for r in [json.loads(x[0]) for x in rows]]
+
+
+def outcome_followups(store,stamp):
+    cutoff=datetime.fromtimestamp(stamp,timezone.utc).isoformat()
+    with store.connect() as db:
+        rows=db.execute("SELECT data FROM entities WHERE kind='outcome_followups' AND json_extract(data,'$.status')='pending' AND json_extract(data,'$.due_at')<=? ORDER BY json_extract(data,'$.due_at') LIMIT 16",(cutoff,)).fetchall()
+    return [json.loads(r[0]) for r in rows]

@@ -73,6 +73,15 @@ def main():
     p=sub.add_parser('artifact-import');p.add_argument('file')
     p=sub.add_parser('usage-import');p.add_argument('file')
     p=sub.add_parser('review-evidence-import');p.add_argument('file')
+    p=sub.add_parser('evidence-plan');p.add_argument('--run-id');p.add_argument('--limit',type=int,default=8)
+    p=sub.add_parser('evidence-build');p.add_argument('file')
+    for command in ('native-family-prepare','cohort-register','cohort-sample-import','method-register','method-generation-bind','method-comparison-plan','method-comparison-bind','engineering-repair-import','package-change-prepare'):
+        p=sub.add_parser(command);p.add_argument('file')
+    for command in ('native-family-result','cohort-report','method-report'):
+        p=sub.add_parser(command);p.add_argument('id')
+    p=sub.add_parser('native-family-dispatch');p.add_argument('--protocol-id',required=True);p.add_argument('--trial-id',required=True);p.add_argument('--admission',required=True);p.add_argument('--child-id',required=True);p.add_argument('--root-id',required=True)
+    p=sub.add_parser('native-family-collect');p.add_argument('--protocol-id',required=True);p.add_argument('--trial-id',required=True);p.add_argument('--transcript',required=True);p.add_argument('--execution-evidence',required=True,help='independent local owner signed execution evidence; not a candidate success claim')
+
     p=sub.add_parser('proactive-plan');p.add_argument('--index-db',required=True);p.add_argument('--exclude-session');p.add_argument('--days',type=int,default=7);p.add_argument('--limit',type=int,default=12)
     p=sub.add_parser('proactive-finish');p.add_argument('--batch-id',required=True);p.add_argument('--receipt',required=True)
     for command in ('evolution-proposal-bind','evolution-evaluation-bind'):
@@ -144,6 +153,42 @@ def main():
         elif args.command=='proactive-finish':
             from .proactive import finish
             result=finish(s,args.batch_id,json.loads(Path(args.receipt).read_text()))
+        elif args.command in {'cohort-register','cohort-sample-import','method-register','method-generation-bind','method-comparison-plan','method-comparison-bind','engineering-repair-import','package-change-prepare'}:
+            from . import outcomes,owner_installers
+            handler={'cohort-register':outcomes.freeze_cohort,'cohort-sample-import':outcomes.record_cohort_sample,'method-register':outcomes.register_method_version,'method-generation-bind':outcomes.bind_generation,'method-comparison-plan':outcomes.preregister_method_comparison,'method-comparison-bind':outcomes.bind_method_comparison,'engineering-repair-import':owner_installers.import_engineering_repair,'package-change-prepare':owner_installers.prepare_package_change}[args.command]
+            result=handler(s,json.loads(Path(args.file).read_text()))
+        elif args.command in {'cohort-report','method-report'}:
+            from .outcomes import cohort_report,method_report
+            result=(cohort_report if args.command=='cohort-report' else method_report)(s,args.id)
+        elif args.command=='native-family-prepare':
+            from .task_families import NativeTaskFamilyDriver,ArgparseTaskOracle
+            from .evaluation import Case
+            from .packages import read_package
+            spec=json.loads(Path(args.file).read_text());protocol=json.loads(s.read_artifact(spec['protocol_sha256']))
+            oracle=ArgparseTaskOracle.from_descriptor(s,json.loads(s.read_artifact(protocol['oracle_sha256'])))
+            cases=[Case(c['id'],{n:s.read_artifact(h) for n,h in c['input_files'].items()},c['source'],c['split'],c['evidence_sha256'],tuple(c.get('categories',[]))) for c in spec['cases']]
+            driver=NativeTaskFamilyDriver.prepare(s,protocol,read_package(s,spec['parent_package']),read_package(s,spec['candidate_package']),cases,oracle,spec['work_root'])
+            result=s.get('task_family_runs',protocol['id'])
+        elif args.command=='native-family-dispatch':
+            from .task_families import NativeTaskFamilyDriver
+            value=NativeTaskFamilyDriver(s,args.protocol_id).dispatch(args.trial_id,json.loads(Path(args.admission).read_text()),args.child_id,args.root_id)
+            result={k:value[k] for k in ('id','status','child_id','admission_sha256','ticket_sha256','workdir')}
+        elif args.command=='native-family-collect':
+            from .task_families import NativeTaskFamilyDriver,ArgparseTaskOracle
+            protocol=s.get('protocols',args.protocol_id)
+            oracle=ArgparseTaskOracle.from_descriptor(s,json.loads(s.read_artifact(protocol['oracle_sha256'])))
+            value=NativeTaskFamilyDriver(s,args.protocol_id).collect(args.trial_id,args.transcript,oracle,json.loads(Path(args.execution_evidence).read_text()))
+            result={k:value[k] for k in ('id','status','passed','cost','artifacts')}
+        elif args.command=='native-family-result':
+            from .task_families import NativeTaskFamilyDriver
+            value=NativeTaskFamilyDriver(s,args.id).result()
+            result={k:value[k] for k in ('id','status','paired_gain','paired_gain_lower_bound','missing')};result['evidence_sha256']=s.artifact(canonical(value))
+        elif args.command=='evidence-plan':
+            from .evidence import evidence_plan
+            result=evidence_plan(s,args.run_id,args.limit)
+        elif args.command=='evidence-build':
+            from .evidence import build_selected_evidence
+            result=build_selected_evidence(s,json.loads(Path(args.file).read_text()))
         elif args.command=='review-evidence-import':
             from .evidence import attach_evidence
             result=attach_evidence(s,json.loads(Path(args.file).read_text()))
