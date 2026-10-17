@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from skill_observatory.proactive import plan, finish
+from skill_observatory.proactive import plan, finish, follow_up
 from skill_observatory.store import Store, canonical
 from skill_observatory.transcripts import observe_session
 
@@ -53,6 +53,78 @@ def test_pending_survives_restart_and_partial_receipt_never_discards_work(tmp_pa
     final = receipt(s, batch, ids=[i['id'] for i in batch['items'] if i['id'] != 'self'])
     assert finish(s, batch['batch_id'], final, stamp=STAMP)['status'] == 'completed'
     assert plan(s, index, stamp=STAMP+2)['status'] == 'no_change'
+
+
+def followup_case(tmp_path):
+    s, scope, index = setup(tmp_path)
+    for i in range(12): chat(scope, index, str(i))
+    batch = plan(s, index, stamp=STAMP)
+    finish(s, batch['batch_id'], receipt(s, batch, ids=['self']), stamp=STAMP)
+    item = s.get('proactive_review_items', 'self')
+    value = {'schema_version': 1, 'root_session_id': 'later-native-root',
+             'fingerprint': item['fingerprint'], 'previous_evidence_sha256': item['evidence_sha256'],
+             'evidence_sha256': s.artifact(b'Later owner rollout; outcome evidence remains pending.'),
+             'next_check_at': STAMP + 100}
+    return s, index, batch, item, value
+
+
+def test_followup_preserves_finished_self_pending_items_and_next_cycle(tmp_path):
+    s, index, batch, original, value = followup_case(tmp_path)
+    before = s.get('proactive_review_batches', 'active')
+    result = follow_up(s, batch['batch_id'], value, stamp=STAMP+1)
+    after = s.get('proactive_review_batches', 'active')
+    assert after['items'] == before['items'] and after['results'] == before['results']
+    assert len(after['items']) - len(after['results']) == 12 and after['status'] == 'pending'
+    row = s.get('proactive_review_items', 'self')
+    assert all(row[k] == original[k] for k in original if k != 'eligible_at')
+    assert row['followups'][0]['evidence_sha256'] == value['evidence_sha256']
+    assert row['eligible_at'] == value['next_check_at']
+    resumed = plan(Store(s.root), index, stamp=STAMP+2)
+    assert resumed['followups'][0]['id'] == result['followup_id']
+    finish(s, batch['batch_id'], receipt(s, batch, ids=[i['id'] for i in batch['items'] if i['id'] != 'self']), stamp=STAMP+2)
+    new = plan(s, index, stamp=STAMP+101)
+    system = next(i for i in new['items'] if i['id'] == 'self')
+    assert system['previous_review']['followups'] == row['followups']
+    finish(s, new['batch_id'], receipt(s, new, stamp=STAMP+101, ids=['self']), stamp=STAMP+101)
+    assert s.get('proactive_review_items', 'self')['followups'] == row['followups']
+    current = s.get('proactive_review_items', 'self')
+    assert follow_up(s, batch['batch_id'], value, stamp=STAMP+102)['idempotent']
+    assert s.get('proactive_review_items', 'self') == current
+
+
+@pytest.mark.parametrize('field,value,reason', [
+    ('fingerprint', '0'*64, 'PROACTIVE_SOURCE_MISMATCH'),
+    ('previous_evidence_sha256', '0'*64, 'PROACTIVE_FOLLOWUP_CAS_MISMATCH'),
+    ('evidence_sha256', '0'*64, 'ARTIFACT_CORRUPT'),
+    ('next_check_at', STAMP, 'PROACTIVE_FOLLOW_UP_REQUIRED'),
+    ('next_check_at', STAMP+31*86400, 'PROACTIVE_FOLLOW_UP_REQUIRED'),
+    ('next_check_at', float('nan'), 'PROACTIVE_FOLLOWUP_INVALID'),
+    ('next_check_at', True, 'PROACTIVE_FOLLOWUP_INVALID'),
+    ('root_session_id', '', 'PROACTIVE_FOLLOWUP_INVALID'),
+    ('item_id', 'chat_unsupported', 'PROACTIVE_FOLLOWUP_INVALID'),
+])
+def test_followup_refusals_are_atomic(tmp_path, field, value, reason):
+    s, index, batch, item, valid = followup_case(tmp_path)
+    before = s.get('proactive_review_batches', 'active')
+    with pytest.raises(ValueError, match=reason):
+        follow_up(s, batch['batch_id'], {**valid, field: value}, stamp=STAMP+1)
+    assert s.get('proactive_review_batches', 'active') == before
+    assert s.get('proactive_review_items', 'self') == item
+    assert not s.list('proactive_review_followups')
+
+
+def test_followup_batch_conflict_and_duplicate(tmp_path):
+    s, index, batch, item, value = followup_case(tmp_path)
+    with pytest.raises(ValueError, match='PROACTIVE_FOLLOWUP_BATCH_MISMATCH'):
+        follow_up(s, 'stale-batch', value, stamp=STAMP+1)
+    follow_up(s, batch['batch_id'], value, stamp=STAMP+1)
+    before = s.get('proactive_review_batches', 'active')
+    assert follow_up(s, batch['batch_id'], value, stamp=STAMP+2)['idempotent']
+    assert s.get('proactive_review_batches', 'active') == before
+    assert len(s.list('proactive_review_followups')) == 1
+    with pytest.raises(ValueError, match='PROACTIVE_FOLLOWUP_CONFLICT'):
+        follow_up(s, batch['batch_id'], {**value, 'next_check_at': STAMP+200}, stamp=STAMP+2)
+    assert s.get('proactive_review_batches', 'active') == before
 
 
 def test_index_is_readonly_and_outside_transcript_is_never_opened(tmp_path):

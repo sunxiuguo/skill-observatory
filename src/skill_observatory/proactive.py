@@ -6,6 +6,8 @@ Planning does not claim review, successful delivery, or authority to change a Sk
 from __future__ import annotations
 
 import json
+import math
+import re
 import sqlite3
 import time
 from contextlib import closing
@@ -234,7 +236,7 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
             if previous.get('fingerprint') != item['fingerprint'] or previous.get('eligible_at', float('inf')) <= stamp:
                 if previous:
                     item['previous_review'] = {k: previous[k] for k in
-                        ('disposition', 'evidence_sha256', 'consecutive_holds', 'escalate') if k in previous}
+                        ('disposition', 'evidence_sha256', 'consecutive_holds', 'escalate', 'followups') if k in previous}
                 candidates.append(item)
                 position = (position + 1) % len(schedule)
         overflow = overflow or len(exhausted) < len(lanes)
@@ -251,7 +253,7 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
         if previous.get('fingerprint') != system['fingerprint'] or previous.get('eligible_at', 0) <= stamp:
             if previous:
                 system['previous_review'] = {k: previous[k] for k in
-                    ('disposition', 'evidence_sha256', 'consecutive_holds', 'escalate') if k in previous}
+                    ('disposition', 'evidence_sha256', 'consecutive_holds', 'escalate', 'followups') if k in previous}
             candidates.insert(0, system)
         if not candidates:
             return {'status': 'no_change', 'items': [], 'scanned': scanned, 'more_sources': overflow,
@@ -328,7 +330,8 @@ def finish(store, batch_id, receipt, *, stamp=None):
                 'source_changed': changed,
                 'evidence_sha256': result['evidence_sha256'], 'eligible_at': stamp + 1 if changed else due,
                 'reviewed_at': now(), 'root_session_id': receipt['root_session_id'],
-                'consecutive_holds': holds, 'escalate': holds >= 3}, db)
+                'consecutive_holds': holds, 'escalate': holds >= 3,
+                **({'followups': old['followups']} if old.get('followups') else {})}, db)
             results[result['id']] = result
         store.artifact(canonical(receipt))
         batch.update(results=results, source_changes=source_changes, last_receipt_sha256=receipt_sha,
@@ -343,6 +346,59 @@ def finish(store, batch_id, receipt, *, stamp=None):
                 'source_changes': len(source_changes),
                 'claim': 'root_review_accounting_not_promotion_or_RSI_certification'}
 
+
+
+def follow_up(store, batch_id, receipt, *, stamp=None):
+    """Append self evidence without replacing an already finished root result."""
+    fields = {'schema_version', 'root_session_id', 'fingerprint',
+              'previous_evidence_sha256', 'evidence_sha256', 'next_check_at'}
+    if not isinstance(receipt, dict) or set(receipt) != fields or type(receipt['schema_version']) is not int \
+            or receipt['schema_version'] != 1 or len(canonical(receipt)) > 24000:
+        raise ValueError('PROACTIVE_FOLLOWUP_INVALID')
+    root = receipt['root_session_id']; due = receipt['next_check_at']
+    if not isinstance(root, str) or not 0 < len(root) <= 128 or root.strip() != root \
+            or type(due) not in {int, float} or not math.isfinite(due) \
+            or any(not isinstance(receipt[k], str) or not re.fullmatch('[0-9a-f]{64}', receipt[k])
+                   for k in ('fingerprint', 'previous_evidence_sha256', 'evidence_sha256')):
+        raise ValueError('PROACTIVE_FOLLOWUP_INVALID')
+    stamp = time.time() if stamp is None else stamp
+    identity = 'pf_' + digest(canonical([batch_id, receipt['fingerprint'], root, receipt['evidence_sha256']]))[:24]
+    receipt_sha = digest(canonical(receipt))
+    with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        existing = store.get('proactive_review_followups', identity, db)
+        if existing:
+            if existing['receipt_sha256'] != receipt_sha:
+                raise ValueError('PROACTIVE_FOLLOWUP_CONFLICT')
+            return {'batch_id': batch_id, 'followup_id': identity, 'idempotent': True,
+                    'evidence_sha256': existing['evidence_sha256'], 'claim': 'follow_up_only'}
+        batch = store.get('proactive_review_batches', 'active', db)
+        if not batch or batch['batch_id'] != batch_id or 'self' not in batch.get('results', {}):
+            raise ValueError('PROACTIVE_FOLLOWUP_BATCH_MISMATCH')
+        original = json.loads(store.read_artifact(batch['manifest_sha256']))
+        items = [i for i in original['items'] if i['id'] == 'self']
+        item = store.get('proactive_review_items', 'self', db)
+        if len(items) != 1 or not item or items[0]['fingerprint'] != receipt['fingerprint'] \
+                or item.get('fingerprint') != receipt['fingerprint']:
+            raise ValueError('PROACTIVE_SOURCE_MISMATCH')
+        if item.get('evidence_sha256') != receipt['previous_evidence_sha256']:
+            raise ValueError('PROACTIVE_FOLLOWUP_CAS_MISMATCH')
+        if not stamp < due <= stamp + 30 * 86400:
+            raise ValueError('PROACTIVE_FOLLOW_UP_REQUIRED')
+        if not store.read_artifact(receipt['evidence_sha256']).strip():
+            raise ValueError('PROACTIVE_EVIDENCE_REQUIRED')
+        record = {'id': identity, 'batch_id': batch_id, **receipt,
+                  'receipt_sha256': receipt_sha, 'created_at': now(), 'status': 'follow_up'}
+        reference = {k: record[k] for k in ('id', 'batch_id', 'root_session_id',
+                                           'evidence_sha256', 'next_check_at')}
+        store.put('proactive_review_followups', record, db)
+        store.put('proactive_review_items', {**item,
+                  'followups': [*item.get('followups', []), reference],
+                  'eligible_at': min(item.get('eligible_at', due), due)}, db)
+        store.put('proactive_review_batches', {**batch,
+                  'followups': [*batch.get('followups', []), reference]}, db)
+        return {'batch_id': batch_id, 'followup_id': identity, 'idempotent': False,
+                'evidence_sha256': receipt['evidence_sha256'], 'claim': 'follow_up_only'}
 
 
 def evidence_actions(store):

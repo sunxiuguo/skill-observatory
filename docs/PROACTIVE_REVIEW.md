@@ -89,6 +89,21 @@ oracle/split/全部尝试预算；独立 final 不交 proposer，已暴露 selec
 uv run skillobs --state PRIVATE_STATE proactive-finish --batch-id BATCH_ID --receipt PRIVATE_RECEIPT
 ```
 
+如果当前批次的 `self` 已由另一轮根处理，后续安装/验证的证据用
+`proactive-followup --batch-id BATCH_ID --receipt PRIVATE_RECEIPT` 追加，不重写原
+`proactive-finish` 结果。收据固定为以下字段；三个 SHA 均为完整 64 位小写十六进制，
+`next_check_at` 是未来 30 天内的有限 Unix 秒数：
+
+```json
+{"schema_version":1,"root_session_id":"ACTUAL_ROOT","fingerprint":"SELF_FINGERPRINT_SHA256","previous_evidence_sha256":"CURRENT_SELF_EVIDENCE_SHA256","evidence_sha256":"IMPORTED_FOLLOWUP_SHA256","next_check_at":1792281600}
+```
+
+该入口只追加当前已完成 `self` 的补充证据，核对批次、指纹、旧证据与本地非空制品；
+原结果、原根、处置和其他待办保持原值。完全相同的收据可幂等重送，身份相同而内容冲突
+则拒绝。恢复中的批次在顶层 `followups` 返回追加项，即使 `self` 已在 `results` 中，根也
+应查看这些未决证据；后续系统项通过 `previous_review.followups` 接续，跨轮完成后继续保留。
+补充收据仅登记后续工作，不授予安装权限或领域/Skill/RSI 验收。
+
 `disposition` 为 no_change、candidate、repaired、hold、follow_up；每项都须证据 hash 及未来 30 天内复查时间，未决问题通常 24 小时，等待自然任务按可获得样本安排。修复收据须包含真实复现与反例、通过的检查和实际读回；该命令只记根审阅进度，不写安装/领域验收/RSI 认证。finish 重新检查源文件 size/mtime/inode；期间变化的项降为 follow_up 并立即到期，不能记录为当前已修复。源变化立即重新审查；未变化等待已记录的时间，复查义务不因原会话超过 7 天消失。所有失败尝试与成本仍留原 owner，不能只留赢家。
 
 每个真正的修复闭环核对实际 diff、受影响行为与项目合同检查；按合同做容器/Web/安装门。本项目源码完成后按 AGENTS 提交、推送、回读最终远端与适用 CI；不提交其他项目未经授权的改动。检查真实自然后续结果后再区分工程修复、Skill 改善、用户收益和方法递归。普通状态不发重复通知；有意义修复、持续失败、完成或确需用户决策时用简短中文说明实际结果和未决边界。

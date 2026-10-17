@@ -84,6 +84,7 @@ def main():
 
     p=sub.add_parser('proactive-plan');p.add_argument('--index-db',required=True);p.add_argument('--exclude-session');p.add_argument('--days',type=int,default=7);p.add_argument('--limit',type=int,default=12)
     p=sub.add_parser('proactive-finish');p.add_argument('--batch-id',required=True);p.add_argument('--receipt',required=True)
+    p=sub.add_parser('proactive-followup');p.add_argument('--batch-id',required=True);p.add_argument('--receipt',required=True)
     for command in ('evolution-proposal-bind','evolution-evaluation-bind'):
         p=sub.add_parser(command);p.add_argument('file')
     p=sub.add_parser('review-reconcile');p.add_argument('id');p.add_argument('--readback',required=True)
@@ -153,6 +154,9 @@ def main():
         elif args.command=='proactive-finish':
             from .proactive import finish
             result=finish(s,args.batch_id,json.loads(Path(args.receipt).read_text()))
+        elif args.command=='proactive-followup':
+            from .proactive import follow_up
+            result=follow_up(s,args.batch_id,json.loads(Path(args.receipt).read_text()))
         elif args.command in {'cohort-register','cohort-sample-import','method-register','method-generation-bind','method-comparison-plan','method-comparison-bind','engineering-repair-import','package-change-prepare'}:
             from . import outcomes,owner_installers
             handler={'cohort-register':outcomes.freeze_cohort,'cohort-sample-import':outcomes.record_cohort_sample,'method-register':outcomes.register_method_version,'method-generation-bind':outcomes.bind_generation,'method-comparison-plan':outcomes.preregister_method_comparison,'method-comparison-bind':outcomes.bind_method_comparison,'engineering-repair-import':owner_installers.import_engineering_repair,'package-change-prepare':owner_installers.prepare_package_change}[args.command]
