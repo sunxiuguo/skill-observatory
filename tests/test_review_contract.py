@@ -70,7 +70,7 @@ def test_provider_schema_mapping_keeps_local_truth_gate(tmp_path,monkeypatch,for
  else:assert reviewer.review(s,run)['status']=='reviewed'
 
 
-@pytest.mark.parametrize('transport_failure',['eof','failed_turn'])
+@pytest.mark.parametrize('transport_failure',['eof','failed_turn','terminal_only'])
 def test_reviewer_persists_transport_failure_without_waiting_for_generic_timeout(tmp_path,monkeypatch,transport_failure):
  from skill_observatory.reviewer import CodexReviewer
  s=Store(tmp_path/'state');s.settings({'scopes':[str(tmp_path)]})
@@ -79,9 +79,10 @@ def test_reviewer_persists_transport_failure_without_waiting_for_generic_timeout
   def __init__(self):
    self.notifications=[];self.messages=queue.Queue();self.wire_receipts=[{'phase':'awaiting_headers','forwarded':True,'secret':'never store'}]
    if transport_failure=='eof':self.messages.put({'_transport':'APP_SERVER_EOF'})
-   else:
+   elif transport_failure=='failed_turn':
     self.messages.put({'method':'error','params':{'threadId':'thread','turnId':'turn','error':{'codexErrorInfo':'HttpConnectionFailed','message':'private details'},'willRetry':False}})
     self.messages.put({'method':'turn/completed','params':{'threadId':'thread','turnId':'turn','turn':{'status':'failed'}}})
+   else:self.messages.put({'method':'turn/completed','params':{'threadId':'thread','turnId':'turn','turn':{'status':'failed','error':{'message':'Stream closed before response.completed; secret=private'}}}})
   def request(self,method,params):return {'thread':{'id':'thread'},'model':'synthetic'} if method=='thread/start' else {'turn':{'id':'turn'}}
   def __enter__(self):return self
   def __exit__(self,*args):pass
@@ -93,4 +94,20 @@ def test_reviewer_persists_transport_failure_without_waiting_for_generic_timeout
  assert attempt['transport']==[{'phase':'awaiting_headers','forwarded':True}]
  assert attempt['wall_seconds']<10
  if transport_failure=='failed_turn':assert attempt['last_error_code']=='HttpConnectionFailed' and attempt['server_will_retry'] is False
+ if transport_failure=='terminal_only':assert attempt['failure_diagnostics']['category']=='stream_incomplete'
  assert 'private' not in json.dumps(attempt) and 'secret' not in json.dumps(attempt)
+
+
+@pytest.mark.parametrize('message,category',[
+ ('Rate limit reached: private bearer token', 'rate_limit'),
+ ('Maximum context length exceeded at /private/path', 'context_limit'),
+ ('Failed to deserialize upstream response with secret details', 'response_parse'),
+ ('Unclassified provider detail private', 'unclassified'),
+])
+def test_failure_projection_keeps_identity_without_sensitive_prose(message,category):
+ from skill_observatory.reviewer import failure_diagnostics
+ from skill_observatory.store import digest
+ value={'message':message,'codexErrorInfo':'other'}
+ result=failure_diagnostics(value)
+ assert result=={'category':category,'error_sha256':digest(canonical(value))}
+ assert 'private' not in json.dumps(result) and 'secret' not in json.dumps(result)

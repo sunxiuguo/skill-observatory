@@ -257,31 +257,34 @@ def observe_session(store, path, expected_session_id, source):
                         }
                     )
             for s in registered:
-                if s["id"] in ids:
-                    cap_binding = (
-                        next(
-                            (
-                                c
-                                for c in binding.get("caps", [])
-                                if store.get("capability_catalog", c["capability_id"])["path"] == s["path"]
-                            ),
-                            None,
-                        )
-                        if isinstance(binding, dict)
-                        else None
+                if s["id"] in ids and isinstance(binding, dict):
+                    cap_binding = next(
+                        (
+                            c
+                            for c in binding.get("caps", [])
+                            if (store.get("capability_catalog", c["capability_id"]) or {}).get("path") == s["path"]
+                        ),
+                        None,
                     )
-                    content = (
-                        store.read_artifact(cap_binding["content_sha256"]).decode()
-                        if cap_binding
-                        else (Path(s["path"]) / "SKILL.md").read_text()
-                    )
+                    if not isinstance(cap_binding, dict):
+                        continue
+                    version_record = store.get("capability_versions", cap_binding["version_id"])
+                    if (
+                        not version_record
+                        or version_record.get("capability_id") != cap_binding["capability_id"]
+                        or version_record["manifest"]["files"].get("SKILL.md") != cap_binding["file_sha256"]
+                    ):
+                        continue
+                    content = store.read_artifact(cap_binding["content_sha256"]).decode()
                     if any(content in t for t in expanded):
                         base.setdefault("verified_attributions", []).append(
                             {
                                 "skill_id": s["id"],
-                                "package_sha256": s["package_sha256"],
-                                "file_sha256": digest(content.encode()),
+                                "package_sha256": version_record["package_sha256"],
+                                "file_sha256": cap_binding["file_sha256"],
                                 "attribution": "verified_read",
+                                "capability_id": cap_binding["capability_id"],
+                                "version_id": cap_binding["version_id"],
                                 "loaded_version_source": "exact_whole_tool_output",
                                 "observed_at": o.get("timestamp"),
                             }

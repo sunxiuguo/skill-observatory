@@ -19,6 +19,26 @@ class ReviewDeferred(ValueError):
         super().__init__(reason); self.eligible_at=eligible_at
 
 
+def failure_diagnostics(error):
+    """Keep a bounded failure identity without retaining provider prose/secrets.
+
+    Classification is diagnostic only; it never grants retries or admission.
+    """
+    if not isinstance(error,dict):
+        return {'category':'unclassified','error_sha256':digest(canonical(error))}
+    message=error.get('message')
+    text=message.lower() if isinstance(message,str) else ''
+    categories=[('authentication',r'unauthorized|authentication|invalid api key'),
+                ('rate_limit',r'rate.?limit|too many requests'),
+                ('quota',r'quota|insufficient credit'),
+                ('context_limit',r'context.{0,40}(length|limit)|maximum context'),
+                ('output_limit',r'max.?output.?tokens|maximum output|output.{0,20}token.{0,20}limit'),
+                ('stream_incomplete',r'stream.{0,60}(disconnect|closed|incomplete)|response\.completed'),
+                ('response_parse',r'deserializ|failed to parse|invalid json')]
+    category=next((name for name,pattern in categories if re.search(pattern,text)), 'unclassified')
+    return {'category':category,'error_sha256':digest(canonical(error))}
+
+
 def review_schema(run):
     """Constrain generation to exact tuples; local acceptance stays authoritative."""
     schema=json.loads((files('skill_observatory')/'review.schema.json').read_text())
@@ -115,7 +135,8 @@ class CodexReviewer:
                     if method=='error':
                         error=p.get('error',{});code=error.get('codexErrorInfo')
                         code=code if isinstance(code,str) and re.fullmatch(r'[A-Za-z0-9_]{1,100}',code) else type(code).__name__
-                        save(last_error_code=code,server_will_retry=p.get('willRetry') is True)
+                        save(last_error_code=code,server_will_retry=p.get('willRetry') is True,
+                             failure_diagnostics=failure_diagnostics(error))
                     if time.monotonic()-last_diagnostics>=5:
                         save(last_event_at=now());last_diagnostics=time.monotonic()
                     if method=='thread/tokenUsage/updated':
@@ -130,6 +151,8 @@ class CodexReviewer:
                             texts.append(text)
                             save(output_sha256=store.artifact(canonical(redact(texts))),status='output_received')
                     if method=='turn/completed':
+                        if p.get('turn',{}).get('error') is not None:
+                            save(failure_diagnostics=failure_diagnostics(p['turn']['error']))
                         save(terminal_status=p.get('turn',{}).get('status'),status='terminal_received',usage_complete=p.get('turn',{}).get('status')=='completed' and attempt.get('usage') is not None)
                         if p.get('turn',{}).get('status')!='completed':raise ValueError('REVIEW_TURN_FAILED')
                         terminal=True;break

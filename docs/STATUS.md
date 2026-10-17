@@ -1,3 +1,48 @@
+# Daily owner follow-up and engineering repairs — 2026-10-17
+
+The daily owner resumed yesterday's unfinished batch and reviewed a second
+bounded batch: 24 conversation items and two system items. Missing historical
+sources, active source changes and original task-owner holds remain explicit;
+this is not full-window or natural-outcome coverage.
+
+A reproduced attribution defect is repaired in source. When PreToolUse captured
+v1 but registration changed to v2 before PostToolUse, the old code could pair
+v1 bytes with the current v2 package hash. The event and run now use the frozen
+version, and absent bindings cannot fall back to current disk bytes. Positive,
+wrong-version, legacy, privacy and duplicate-observation regressions pass.
+
+The earlier managed command repair is now linked to its actual incident,
+original-owner transaction, immutable version, source run and backup/readback.
+It remains engineering_verified with missing historical applied_at preserved;
+later verified reads alone do not certify activation or natural gain. The facts
+sweep created eight explicit selection work items without model calls.
+
+An existing v1-owner factual review ended failed after dispatch in about 156
+seconds, with HTTP 200 transport completed and no local deadline expiry. Its
+attempt and unknown usage/cost are retained without replay. Previous telemetry
+kept only the generic error code other, so the exact cause is unknown. Source
+diagnostics now retain a fixed failure category and error fingerprint, including
+terminal-only errors, without provider prose or credentials. Qualification of
+changed reviewer bytes remains required before their use.
+
+Bounded collection recovered a selected large source through its captured EOF;
+oversized records retain hashed semantic gaps and unknown affected coverage.
+The original immutable v1 service was restored and read back healthy, with zero
+closed unread tails at that observation. The full v2 service/global-owner rollout
+and independent final inputs remain separate pending dependencies.
+
+Validation: 301 backend tests passed with required actual Docker execution,
+9 actual API/DOM tests passed, and contract/build/distribution plus isolated wheel
+installation/readback passed. SQLite quick_check passed; the existing hot-history,
+lossless archive and single ledger remain in use. No retention gate was lowered.
+
+One previous private as-of readback file was accidentally overwritten by reusing
+an earlier helper's fixed output. Its original hash remains recorded but the
+original bytes are unavailable; the retention gap is explicit. Current readback
+is stored separately, and the helper now requires an explicit output and refuses
+overwriting existing files. Original Git/CI receipts remain intact. No historical
+reconstruction or domain/Skill/natural/method gain is claimed.
+
 # RSI integration — source stage accepted, 2026-10-17
 
 The implementation candidate connects bounded collection recovery, versioned

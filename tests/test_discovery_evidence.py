@@ -1,6 +1,9 @@
+import json
+
 import pytest
 from skill_observatory.store import Store,canonical
-from skill_observatory.runtime import register,spool,ingest
+from skill_observatory.runtime import register,spool,ingest,package_manifest
+from skill_observatory.transcripts import observe_session
 from skill_observatory.capabilities import discover,record_usage,register_capability
 from skill_observatory.evidence import attach_evidence,build_capsule
 
@@ -40,3 +43,134 @@ def test_capsule_bound_to_actual_version_run_and_redacted_facts(tmp_path):
  with pytest.raises(ValueError,match='STEP_NOT_BOUND'):attach_evidence(s,{**value,'steps':[{'event_id':'unknown','fact':'fake'}]})
  s.put('runs',{**r,'event_ids':[*r['event_ids'],'new']})
  assert 'EVIDENCE_CAPSULE_RUN_DRIFT' in build_capsule(s,s.get('runs',r['id']))['missing']
+
+
+def _versioned_setup(tmp_path, old):
+    project = tmp_path / 'project'
+    project.mkdir()
+    s = Store(tmp_path / 'state')
+    s.settings({'scopes': [str(project)]})
+    skill = project / 'flow'
+    skill.mkdir()
+    (skill / 'SKILL.md').write_text(old)
+    register(s, skill, 'owner')
+    cap = s.list('capability_catalog')[0]
+    transcript = tmp_path / 'session.jsonl'
+    records = [
+        {'timestamp': '2026-10-17T00:00:00Z', 'type': 'session_meta', 'payload': {'id': 's', 'cwd': str(project), 'cli_version': '0.162.0-alpha.2'}},
+        {'timestamp': '2026-10-17T00:00:00Z', 'type': 'turn_context', 'payload': {'turn_id': 't'}},
+        {'timestamp': '2026-10-17T00:00:00Z', 'type': 'response_item', 'payload': {'type': 'function_call', 'call_id': 'call', 'name': 'exec_command', 'arguments': 'cat ' + str(skill / 'SKILL.md')}},
+    ]
+    transcript.write_text(''.join(json.dumps(record) + '\n' for record in records))
+    return s, transcript, skill, cap
+
+
+def _append_output(transcript, content):
+    record = {
+        'timestamp': '2026-10-17T00:00:02Z',
+        'type': 'response_item',
+        'payload': {'type': 'function_call_output', 'call_id': 'call', 'output': content},
+    }
+    with transcript.open('a') as f:
+        f.write(json.dumps(record) + '\n')
+
+
+def _post_tool_use_events(s):
+    with s.connect() as db:
+        rows = db.execute(
+            "SELECT data FROM events WHERE json_extract(data, '$.event') = 'PostToolUse'"
+        ).fetchall()
+    return [json.loads(row[0]) for row in rows]
+
+
+def _run(s):
+    return next(run for run in s.list('runs') if run['turn_id'] == 't')
+
+
+def test_post_tool_use_keeps_pre_call_frozen_package(tmp_path):
+    old = '---\nname: flow\ndescription: old\n---\nOld instructions.\n'
+    s, transcript, skill, old_cap = _versioned_setup(tmp_path, old)
+    old_version = s.get('capability_versions', old_cap['version_id'])
+    assert observe_session(s, transcript, 's', 'codex-desktop')['new_events'] == 1
+
+    new = old.replace('old', 'new')
+    (skill / 'SKILL.md').write_text(new)
+    new_cap = register(s, skill, 'owner')
+    assert new_cap['package_sha256'] != old_version['package_sha256']
+    _append_output(transcript, old)
+
+    assert observe_session(s, transcript, 's', 'codex-desktop')['new_events'] == 1
+    ingest(s)
+    expected = {
+        'skill_id': s.list('skills')[0]['id'],
+        'package_sha256': old_version['package_sha256'],
+        'file_sha256': old_version['manifest']['files']['SKILL.md'],
+        'attribution': 'verified_read',
+        'capability_id': old_cap['id'],
+        'version_id': old_cap['version_id'],
+        'loaded_version_source': 'exact_whole_tool_output',
+        'observed_at': '2026-10-17T00:00:02Z',
+    }
+    post_events = _post_tool_use_events(s)
+    assert len(post_events) == 1
+    assert post_events[0]['attributions'] == [expected]
+    assert 'tool_input' not in post_events[0]
+    assert old not in json.dumps(post_events[0], ensure_ascii=False)
+
+    run = _run(s)
+    assert [a for a in run['attributions'] if a['attribution'] == 'verified_read'] == [expected]
+    assert {a['package_sha256'] for a in run['attributions']} == {old_version['package_sha256']}
+    invocation = s.list('capability_invocations')[0]
+    assert invocation['version_id'] == old_cap['version_id']
+    assert 'verified_read' in invocation['stages']
+
+    assert observe_session(s, transcript, 's', 'codex-desktop')['new_events'] == 0
+    ingest(s)
+    run = _run(s)
+    assert [a for a in run['attributions'] if a['attribution'] == 'verified_read'] == [expected]
+
+
+def test_post_tool_use_rejects_output_from_newer_registered_version(tmp_path):
+    old = '---\nname: flow\ndescription: old\n---\nOld instructions.\n'
+    s, transcript, skill, old_cap = _versioned_setup(tmp_path, old)
+    assert observe_session(s, transcript, 's', 'codex-desktop')['new_events'] == 1
+
+    new = old.replace('old', 'new')
+    (skill / 'SKILL.md').write_text(new)
+    register(s, skill, 'owner')
+    _append_output(transcript, new)
+
+    assert observe_session(s, transcript, 's', 'codex-desktop')['new_events'] == 1
+    ingest(s)
+    post_event = _post_tool_use_events(s)[0]
+    assert 'attributions' not in post_event
+    assert 'capability_observations' not in post_event
+    run = _run(s)
+    assert not [a for a in run['attributions'] if a['attribution'] == 'verified_read']
+    invocation = s.list('capability_invocations')[0]
+    assert invocation['version_id'] == old_cap['version_id']
+    assert invocation['stages'] == ['mentioned']
+
+
+def test_post_tool_use_without_frozen_binding_does_not_read_current_disk(tmp_path):
+    old = '---\nname: flow\ndescription: old legacy\n---\nOld legacy instructions.\n'
+    s, transcript, skill, _ = _versioned_setup(tmp_path, old)
+    with s.connect() as db:
+        db.execute("DELETE FROM entities WHERE kind IN ('capability_catalog', 'capability_versions')")
+    s._catalog_cache.clear()
+
+    assert observe_session(s, transcript, 's', 'codex-desktop')['new_events'] == 1
+    new = old.replace('old', 'current')
+    (skill / 'SKILL.md').write_text(new)
+    legacy = s.list('skills')[0]
+    manifest = package_manifest(skill)
+    s.put('skills', {**legacy, 'package_sha256': manifest['package_sha256'], 'manifest': manifest})
+    _append_output(transcript, new)
+
+    assert observe_session(s, transcript, 's', 'codex-desktop')['new_events'] == 1
+    ingest(s)
+    post_event = _post_tool_use_events(s)[0]
+    assert 'attributions' not in post_event
+    run = _run(s)
+    assert not [a for a in run['attributions'] if a['attribution'] == 'verified_read']
+    assert manifest['package_sha256'] not in json.dumps(run)
