@@ -1,3 +1,41 @@
+# Authorized owner and service rollout — 2026-10-17
+
+The authorized infrastructure rollout is applied and read back. The original
+managed installer now supports atomic package transactions, and the private
+reviewer admits selected v1/v2 facts only within its original external scopes.
+Separately authorized observation settings are preserved. Actual transport and
+schema qualification completed with three requests, zero retries, zero tools
+and 30,345 observed tokens; monetary cost remains UNKNOWN. The synthetic review
+returned HOLD and supplies no independent domain or improvement verdict.
+
+The first service start refused a missed shared-owner binding: `reviewer.json`
+and `evolution.json` reference the same module. The latter still held its old
+hash. Its old-binding refusal and matching-binding load were tested in isolation;
+the unchanged pipeline factory was verified, then the existing binding was
+updated through the original managed CAS/backup/readback workflow. No verifier
+or permission gate was weakened.
+
+The existing service now runs from a separate immutable wheel environment.
+Process, package bytes, HTTP assets, all three workers and reviewer schema
+certification match; the original ledger, settings and six historical unknown
+attempts remain intact without replay. Original code, owner and database backups
+are retained. The temporary implementation-follow-up automation remains paused.
+
+The daily self item had already been reviewed by another root. The new
+`proactive-followup` CLI appends evidence with batch/fingerprint/previous-evidence
+checks and idempotency. Actual import and pending-batch resume expose the new
+follow-up while preserving the original self result and 12 other pending items;
+future self reviews retain those references. No new schedule was created.
+
+Validation: 32 focused tests and 313 complete backend tests pass with required
+real Docker execution; contract, build/distribution audit, installed-wheel CLI,
+old-code recovery installation and live service readback pass. Source commit
+`1bd933c3fb3cd4287a2092e29dc2f996c0674759` has passing CI. This closes the authorized
+owner/reviewer/service/daily rollout, not the full evidence chain: independent
+final truth, feasible frozen budgets, natural cohorts and next-generation method
+evidence remain open. Skill gain is HOLD, natural gain UNKNOWN and method RSI
+UNVERIFIED. No business Skill was promoted or installed by this rollout.
+
 # Independent scheduled runs and authorized scope expansion — 2026-10-17
 
 The existing daily review now uses a standalone task in this project's local

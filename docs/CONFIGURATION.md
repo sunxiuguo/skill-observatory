@@ -69,6 +69,11 @@ file/hash and records `live_verified_at` plus `verified_skill_sha256`. This is
 evidence as of that readback, not a claim of continuous validity or measured gain.
 
 Optional `evolution.json` uses the same private/hash-pinned owner-module format.
+When both configurations reference one owner module, enumerate and back up both
+bindings before replacing it. Keep the service stopped while applying matching
+hashes through the original managed CAS workflow, and verify both factories
+before restart. A correct reviewer binding cannot make a stale evolution binding
+valid; the existing hash refusal remains authoritative.
 Its module exposes `make_pipeline(store)` and returns an `EvolutionPipeline`
 with trusted proposer, evaluator and activation adapters. The local owner may
 compose canonical installers and signing ingresses; candidate/model workers
