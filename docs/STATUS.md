@@ -1,3 +1,29 @@
+# Independent scheduled runs and authorized scope expansion — 2026-10-17
+
+The existing daily review now uses a standalone task in this project's local
+checkout, with native archive-after-completion enabled. The original daily time,
+model and reasoning effort are preserved. A real scheduled lifecycle probe
+created a fresh project session, persisted its private receipt, produced a final
+answer and task-complete event, then was archived by the native scheduler.
+Calling self-archive during an active turn was independently found to interrupt
+the turn; the workflow therefore uses the scheduler's completion archive flag.
+The temporary test schedule was restored, with one active automation identity.
+Native scheduling jitter is distinct from the nominal daily time.
+
+The newly authorized directory is registered for both observation and diagnostics;
+its nested Provider project is included, while outside roots and sibling prefixes
+remain excluded. Existing pending work is unchanged and resumes across sessions.
+An actual standalone CLI 0.162.1 source exposed a previously unsupported format.
+Its verified exec shape is now accepted by the source workflow, with source,
+identity and future-version refusals retained. A real isolated parse and isolated
+wheel readback pass; the existing immutable background service was not upgraded.
+
+Validation: 33 focused regressions and 302 complete backend tests pass, including
+required real-container execution; contract, build, archive audit and isolated
+wheel checks pass. Lifecycle probes and scope admission do not establish full
+review coverage, Skill gain, natural user benefit or method RSI. Private paths,
+authorization evidence, configuration backups and run receipts remain local.
+
 # Daily owner follow-up and engineering repairs — 2026-10-17
 
 The daily owner resumed yesterday's unfinished batch and reviewed a second

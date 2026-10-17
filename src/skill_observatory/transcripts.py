@@ -56,6 +56,12 @@ def _read_meta(store, path, source):
     if version in {"0.160.0", "0.160.1", "0.162.0-alpha.2"}:
         # These verified shapes use id as the transcript/session identity.
         pass
+    elif version == "0.162.1":
+        # Verified standalone CLI exec shape. App/child shapes need their own proof.
+        if source != 'codex-cli' or meta.get('originator') != 'codex_exec' or meta.get('source') != 'exec':
+            raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
+        if not isinstance(meta.get('session_id'), str) or meta.get('session_id') != meta.get('id'):
+            raise ValueError('TRANSCRIPT_SCHEMA_UNVERIFIED')
     elif version == ALPHA_17:
         # The version string alone is not a contract. Current App transcripts
         # carry both the rollout/execution id and the logical parent session.

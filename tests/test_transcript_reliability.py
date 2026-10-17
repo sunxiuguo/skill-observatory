@@ -40,6 +40,18 @@ def test_certified_cli_and_app_schema_and_source_controls(tmp_path,version,sourc
   with pytest.raises(ValueError,match='SCHEMA_UNVERIFIED'):observe_session(s,p,'parent',source)
 
 
+def test_stable_cli_exec_identity_and_unverified_source_refusal(tmp_path):
+ s,p,m=setup(tmp_path,'0.162.1');m.update(originator='codex_exec',source='exec')
+ p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
+ append(p,{'type':'task_complete','turn_id':'t'})
+ assert observe_session(s,p,'parent','codex-cli')['new_events']==1
+ for source in ['codex-desktop','codex-subagent']:
+  with pytest.raises(ValueError,match='SOURCE_SCHEMA_UNVERIFIED'):observe_session(s,p,'parent',source)
+ for patch,reason in [({'source':'vscode'},'SOURCE_SCHEMA_UNVERIFIED'),({'originator':'Codex Desktop'},'SOURCE_SCHEMA_UNVERIFIED'),({'session_id':'other'},'SCHEMA_UNVERIFIED'),({'session_id':None},'SCHEMA_UNVERIFIED'),({'cli_version':'0.162.2'},'VERSION_UNVERIFIED')]:
+  p.write_text(json.dumps({'type':'session_meta','payload':{**m,**patch}})+'\n')
+  with pytest.raises(ValueError,match=reason):observe_session(s,p,'parent','codex-cli')
+
+
 def test_child_hook_transcript_read_is_one_logical_invocation(tmp_path):
  s,p,m=setup(tmp_path,child=True)
  skill=tmp_path/'flow';skill.mkdir();text='---\nname: flow\ndescription: flow\n---\nActual bytes.\n';(skill/'SKILL.md').write_text(text);register(s,skill,'owner')
