@@ -7,10 +7,10 @@ from skill_observatory.evidence import attach_evidence,build_capsule,diagnostic_
 from skill_observatory.reviewer import CodexReviewer
 
 
-def fixture(tmp_path):
+def fixture(tmp_path, owner='owner'):
     s=Store(tmp_path/'state');s.settings({'scopes':[str(tmp_path)]})
     p=tmp_path/'flow';p.mkdir();(p/'SKILL.md').write_text('---\nname: flow\ndescription: scoped proof\n---\nKeep boundaries.')
-    register(s,p,'owner');cap=s.list('capability_catalog')[0]
+    register(s,p,owner);cap=s.list('capability_catalog')[0]
     spool(s,dict(hook_event_name='Stop',session_id='s',turn_id='t',cwd=str(tmp_path)));ingest(s)
     run=s.list('runs')[0];h=s.artifact(b'selected private receipt')
     record_usage(s,dict(capability_id=cap['id'],version_id=cap['version_id'],cwd=str(tmp_path),session_id='s',turn_id='t',invocation_id='read',stage='verified_read',source='fixture',event_id='read',evidence_sha256=h))
@@ -18,7 +18,7 @@ def fixture(tmp_path):
     reviewer=CodexReviewer(None,None,'unused','unused','max',tmp_path)
     process_one(s,reviewer)
     assert s.jobs()[0]['reason_code']=='DIAGNOSTIC_FACTS_REQUIRED'
-    facts=dict(run_id=run['id'],goal='Complete the scoped CLI task',success_criteria='Correct arguments and validated result',owner='owner',version_id=cap['version_id'],result={'status':'failed','reason_code':'CLI_ARGUMENT_MISMATCH','exit_code':2},steps=[{'event_id':run['event_ids'][0],'fact':'The tool rejected an unsupported argument and exited with code 2.'}],receipt_sha256=h)
+    facts=dict(run_id=run['id'],goal='Complete the scoped CLI task',success_criteria='Correct arguments and validated result',owner=owner,version_id=cap['version_id'],result={'status':'failed','reason_code':'CLI_ARGUMENT_MISMATCH','exit_code':2},steps=[{'event_id':run['event_ids'][0],'fact':'The tool rejected an unsupported argument and exited with code 2.'}],receipt_sha256=h)
     return s,run,facts
 
 

@@ -1,3 +1,30 @@
+# Daily factual ingress repair — 2026-10-18
+
+The resumed daily review completed a bounded source pass and continued into the
+next worklist. Missing historical files, an uncertified editor source and oversized
+records remain explicit coverage gaps; child and unclassified executions are not
+natural improvement samples. Existing domain repairs remain with their original
+owners, with no new installation or financial action inferred from their results.
+
+A real selected-facts build reproduced an ingress defect: registered owner labels
+containing spaces were refused by an identifier-only check. Evidence now reuses
+the canonical registration text contract and still requires the exact catalog
+owner, observed immutable version and bound source events. A real historical
+capsule was built and one known pre-dispatch job resumed. It then deferred because
+the configured background model is absent from the current routable pool; a
+read-only original-owner plan confirms that boundary. No new review attempt was
+dispatched. Model substitution needs the original owner's matching qualification;
+ordinary child qualification does not certify background review.
+
+Full regression exposed a separate test-environment dependency: a package-request
+test assumed the host installer lacked package support. It now uses isolated
+actual CLI fixtures for both availability states, retaining drift refusal and the
+no-automatic-apply assertions. Validation passed 319 backend tests with required
+real Docker execution, 9 actual API/DOM tests, contract checks, distribution audit
+and clean wheel installation. Git/remote/final CI identity is checked at delivery.
+This run did not upgrade the existing immutable service or change global Skills.
+Skill gain remains HOLD, natural gain UNKNOWN and method RSI UNVERIFIED.
+
 # Authorized owner and service rollout — 2026-10-17
 
 The authorized infrastructure rollout is applied and read back. The original

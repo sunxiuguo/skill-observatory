@@ -5,6 +5,30 @@ from test_evidence_recovery import fixture
 from skill_observatory.evidence import build_selected_evidence,evidence_plan,build_capsule
 
 
+@pytest.mark.parametrize('owner', ['Project skills owner', '团队 Skill owner'])
+def test_registered_text_owner_can_supply_version_bound_facts(tmp_path, owner):
+    s,run,facts=fixture(tmp_path, owner=owner)
+    receipt=build_selected_evidence(s,facts)
+    assert receipt['resumed_pre_dispatch_jobs']==1
+    capsule=build_capsule(s,s.get('runs',run['id']))
+    assert capsule['facts']['owner']==owner and not capsule['missing']
+    assert build_selected_evidence(s,facts)==receipt
+    assert not s.list('review_attempts')
+
+
+@pytest.mark.parametrize('field,value,reason', [
+    ('owner', 'Other project skills', 'EVIDENCE_OWNER_VERSION_MISMATCH'),
+    ('owner', ' ', 'EVIDENCE_OWNER_VERSION_REQUIRED'),
+    ('version_id', 'version with spaces', 'EVIDENCE_OWNER_VERSION_MISMATCH'),
+])
+def test_text_owner_does_not_relax_identity_checks(tmp_path, field, value, reason):
+    s,run,facts=fixture(tmp_path, owner='Project skills owner')
+    facts[field]=value
+    with pytest.raises(ValueError,match=reason):build_selected_evidence(s,facts)
+    assert s.get('run_evidence',run['id']) is None
+    assert s.jobs()[0]['status']=='hold' and not s.list('review_attempts')
+
+
 def test_selection_build_is_change_driven_private_and_version_bound(tmp_path):
     s,run,facts=fixture(tmp_path)
     first=evidence_plan(s,run['id'])[0];assert first['status']=='awaiting_native_selection'

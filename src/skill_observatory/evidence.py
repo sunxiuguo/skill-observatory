@@ -47,8 +47,13 @@ def attach_evidence(store, value):
         _validate_v2(store,run,value)
     for k in ('goal','success_criteria'):
         if not isinstance(value[k],str) or not 0<len(value[k])<=1600:raise ValueError('EVIDENCE_TEXT_INVALID')
-    if not all(isinstance(value[k],str) and CODE.fullmatch(value[k]) for k in ('owner','version_id')):
+    if not isinstance(value['version_id'],str) or not CODE.fullmatch(value['version_id']):
         raise ValueError('EVIDENCE_OWNER_VERSION_REQUIRED')
+    # Owners are registered text labels; only version IDs use the code grammar.
+    # Reuse registration's contract, then require the exact catalog binding.
+    from .capabilities import _text
+    try:_text(value['owner'],'owner',True)
+    except ValueError as ex:raise ValueError('EVIDENCE_OWNER_VERSION_REQUIRED') from ex
     version=store.get('capability_versions',value['version_id'])
     cap=store.get('capability_catalog',version['capability_id']) if version else None
     if not cap or cap['owner']!=value['owner']:raise ValueError('EVIDENCE_OWNER_VERSION_MISMATCH')
