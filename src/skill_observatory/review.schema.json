@@ -36,6 +36,7 @@
         "properties": {
           "id": {"$ref": "#/$defs/id"},
           "category": {"enum": ["missing_procedure", "incorrect_procedure", "rule_violation", "environment_drift", "implementation_defect", "insufficient_evidence", "supported_success"]},
+          "environment_aspect": {"enum": ["navigation", "automated_checks", "coding_standards", "steering", "tool_economy", "no_op_instructions", "information_access"]},
           "owner_kind": {"enum": ["skill", "project", "environment", "runtime", "unknown"]},
           "severity": {"enum": ["low", "medium", "high", "critical"]},
           "evidence_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},

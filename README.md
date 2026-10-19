@@ -71,8 +71,8 @@ uv run skillobs observe-session /absolute/selected-session.jsonl \
 ```
 
 The versioned transcript adapter supports certified 0.160.0/0.160.1 and
-0.162.0-alpha.2 fixtures, plus the exact 0.162.0-alpha.17.2 Desktop/subagent
-metadata shape. Unknown versions or incompatible source/schema combinations stay HOLD. It
+0.162.0-alpha.2 fixtures, plus the exact 0.162.0-alpha.17.2 and 0.163.0-alpha.10.2 Desktop/subagent
+metadata shapes. Unknown versions or incompatible source/schema combinations stay HOLD. It
 checks session/scope/cursor identity, and uses the same runtime/spool.
 Exact Skill bytes observed in native tool output can support `verified_read`;
 mentioning/discovering a Skill cannot establish execution.
@@ -114,8 +114,8 @@ reconciles actual case/arm outputs and typed all-attempt costs. See the
 CLI ingress, package/owner dependencies, natural cohorts and method lineage.
 The first exposed pilot produced equivalent valid commands, with an overstrict
 oracle, insufficient independent samples and unresolved cost gates; it certifies
-no gain. The current installed generic owner still needs its separately authorized
-package transaction extension. Existing user service deployment is separate.
+no gain. Package writes retain the original owner’s atomic transaction and matching
+authority requirements. Existing user service deployment is separate.
 
 ## Semantic review and owner integration
 
@@ -125,6 +125,13 @@ use the single [proactive review workflow](docs/PROACTIVE_REVIEW.md). Its
 resume unfinished batches and retain forward follow-ups in the existing ledger.
 The Native root performs evidence review and authorized repairs; planning and
 root accounting do not grant promotion authority or certify RSI gains.
+
+For an immediate review of the current or explicitly selected session, use
+`retro-plan --index-db CODEX_INDEX [--session-id SESSION]` and the same
+`proactive-finish` receipt. This preserves daily pending work and both scope
+boundaries. See [selected-session retrospectives](docs/RETROSPECTIVE.md).
+After an authorized owner update, `capability-reconcile` binds reviewed bytes
+to the prior catalog version without rewriting history or certifying gain.
 
 Without a configured reviewer, executions receive deterministic **triage HOLD**,
 not a completed semantic review. `CodexReviewer` accepts a trusted local owner

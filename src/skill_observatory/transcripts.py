@@ -12,6 +12,8 @@ from .store import canonical, digest, now
 
 DESKTOP_APP_ORIGINATOR = "Codex Desktop"
 ALPHA_17 = "0.162.0-alpha.17.2"
+ALPHA_10_APP = "0.163.0-alpha.10.2"
+VERIFIED_APP_VERSIONS = {ALPHA_17, ALPHA_10_APP}
 CHILD_TERMINAL_EVENTS = {"SubagentStart", "SubagentStop"}
 
 
@@ -62,12 +64,17 @@ def _read_meta(store, path, source):
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
         if not isinstance(meta.get('session_id'), str) or meta.get('session_id') != meta.get('id'):
             raise ValueError('TRANSCRIPT_SCHEMA_UNVERIFIED')
-    elif version == ALPHA_17:
+    elif version in VERIFIED_APP_VERSIONS:
         # The version string alone is not a contract. Current App transcripts
         # carry both the rollout/execution id and the logical parent session.
         desktop = meta.get('originator') == DESKTOP_APP_ORIGINATOR
         cli = meta.get('originator') == 'codex_exec'
         spawned = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
+        # This newer artifact was observed in Desktop and its native children.
+        # Its standalone CLI shape has not been verified by those observations.
+        if version == ALPHA_10_APP and (not desktop or source == 'codex-cli'
+                or (source == 'codex-desktop' and meta.get('source') != 'vscode')):
+            raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
         if (source == 'codex-cli' and not (cli and meta.get('source') == 'exec')) \
                 or (source == 'codex-desktop' and not (desktop and not spawned)) \
                 or (source == 'codex-subagent' and not (spawned and (desktop or cli))):
@@ -102,7 +109,7 @@ def _identity(
     agent = execution if source == "codex-subagent" else None
     spawn = meta.get('source', {}).get('subagent', {}).get('thread_spawn', {}) if isinstance(meta.get('source'), dict) else {}
     parent = spawn.get('parent_thread_id')
-    if version == ALPHA_17 and source == 'codex-subagent':
+    if version in VERIFIED_APP_VERSIONS and source == 'codex-subagent':
         if not isinstance(parent,str) or not parent or meta.get('thread_source')!='subagent':
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
     if expected_agent_id:

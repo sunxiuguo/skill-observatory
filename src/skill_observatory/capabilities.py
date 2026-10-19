@@ -60,9 +60,16 @@ def _project_skill(store, cap, version, db):
         raise ValueError('FROZEN_SKILL_VERSION_INVALID')
     sid = 'sk_' + digest(str(Path(cap['path']).resolve()).encode())[:24]
     old = store.get('skills', sid, db) or {}
+    binding=store.get('legacy_projection_migrations',old.get('projection_owner_binding_id',''),db) or {}
+    delegated=(binding.get('skill_id')==sid and binding.get('capability_id')==cap['id']
+               and binding.get('canonical_owner')==cap['owner']
+               and binding.get('installation_owner')==old.get('owner'))
     if old and old['owner'] != cap['owner']:
+        if not delegated:raise ValueError('CANONICAL_OWNER_CONFLICT')
+    if old.get('capability_id') not in {None,cap['id']}:
         raise ValueError('CANONICAL_OWNER_CONFLICT')
-    value = {**old, 'id': sid, 'name': cap['name'], 'path': cap['path'], 'owner': cap['owner'],
+    value = {**old, 'id': sid, 'name': cap['name'], 'path': cap['path'],
+        'owner':old['owner'] if delegated else cap['owner'],'capability_owner':cap['owner'],
         'source': cap['source'], 'license': old.get('license'), 'status': old.get('status', 'observing'),
         'capability_id': cap['id'], 'version_id': version['id'], 'package_sha256': version['package_sha256'],
         'manifest': manifest, 'created_at': old.get('created_at', cap['created_at']),
@@ -110,7 +117,7 @@ def bind_run_attributions(store, run, db, version_id=None):
     return run
 
 
-def register_capability(store,path,owner,kind='skill',purpose=None,background=None,origin=None,capability_id=None,scope=None):
+def register_capability(store,path,owner,kind='skill',purpose=None,background=None,origin=None,capability_id=None,scope=None,*,_reconcile=None):
     if kind not in {'skill','script'}:raise ValueError('CAPABILITY_KIND_INVALID')
     owner=_text(owner,'owner',True);p=Path(path).resolve()
     if not p.is_dir():raise ValueError('PACKAGE_NOT_FOUND')
@@ -129,12 +136,28 @@ def register_capability(store,path,owner,kind='skill',purpose=None,background=No
     else:
         cmd=json.loads((p/'command.json').read_text());description=cmd.get('description') or cmd.get('result')
     purpose=_text(purpose,'purpose');background=_text(background,'background')
-    files={name:store.artifact((p/name).read_bytes()) for name in m['files']}
+    files={}
+    for name,expected in m['files'].items():
+        data=(p/name).read_bytes()
+        if digest(data)!=expected:raise ValueError('CAPABILITY_CHANGED_DURING_READ')
+        files[name]=store.artifact(data)
+    if _reconcile and m['package_sha256']!=_reconcile['package_sha256']:
+        raise ValueError('CAPABILITY_READBACK_DRIFT')
     snapshot=store.artifact(canonical({'files':files,'package_sha256':m['package_sha256']}))
     vid='ver_'+digest(canonical([capid,m['package_sha256']]))[:32];t=now()
     with store.connect() as db:
         db.execute('BEGIN IMMEDIATE');old=store.get('capability_catalog',capid,db)
         if old and (old['owner']!=owner or old['kind']!=kind):raise ValueError('CANONICAL_OWNER_CONFLICT')
+        if _reconcile:
+            if not old or old['path']!=str(p) or old['scope']!=scope or old['status'] in {'retired','quarantined','hold'}:
+                raise ValueError('CAPABILITY_RECONCILIATION_SCOPE_HOLD')
+            prior=store.get('capability_reconciliations',_reconcile['id'],db)
+            if prior:
+                if prior['spec_sha256']!=_reconcile['spec_sha256'] or old['version_id']!=prior['after_version_id']:
+                    raise ValueError('CAPABILITY_RECONCILIATION_CAS_MISMATCH')
+                return old
+            if old['version_id']!=_reconcile['expected_version_id']:
+                raise ValueError('CAPABILITY_RECONCILIATION_CAS_MISMATCH')
         existing=store.get('capability_versions',vid,db)
         if existing and (existing['manifest']!=m or existing['snapshot_sha256']!=snapshot):raise ValueError('IMMUTABLE_VERSION_CONFLICT')
         if not existing:store.put('capability_versions',{'id':vid,'capability_id':capid,'package_sha256':m['package_sha256'],'manifest':m,'snapshot_sha256':snapshot,'origin':origin,'created_at':t},db)
@@ -155,8 +178,74 @@ def register_capability(store,path,owner,kind='skill',purpose=None,background=No
         # Legacy evaluator identity is a projection of the immutable version,
         # never a second mutable package fact or a new authority grant.
         if kind=='skill':
+            if _reconcile and _reconcile.get('legacy_projection_sha256'):
+                sid='sk_'+digest(str(p).encode())[:24]
+                legacy=store.get('skills',sid,db)
+                if (not legacy or digest(canonical(legacy))!=_reconcile['legacy_projection_sha256']
+                        or legacy.get('capability_id') or legacy.get('version_id')
+                        or legacy.get('path')!=str(p)):
+                    raise ValueError('LEGACY_PROJECTION_CAS_MISMATCH')
+                protected=db.execute("SELECT data FROM entities WHERE kind IN ('authority_grants','installations','candidates') "
+                    "AND (json_extract(data,'$.target') IN (?,?) OR json_extract(data,'$.target_root')=?)",
+                    (str(p),str(p/'SKILL.md'),str(p))).fetchall()
+                if any(json.loads(row[0]).get('owner')!=legacy['owner'] for row in protected):
+                    raise ValueError('LEGACY_PROJECTION_AUTHORITY_HOLD')
+                store.put('legacy_projection_migrations',{
+                    'id':_reconcile['id'],'skill_id':sid,'capability_id':capid,
+                    'before_sha256':store.artifact(canonical(legacy)),
+                    'previous_owner':legacy['owner'],'canonical_owner':owner,'installation_owner':legacy['owner'],
+                    'evidence_sha256':_reconcile['evidence_sha256'],'created_at':t,
+                    'claim':'unbound_projection_binding_only_no_authority_change'},db)
+                store.put('skills',{**legacy,'projection_owner_binding_id':_reconcile['id']},db)
             _project_skill(store, value, store.get('capability_versions', vid, db), db)
+        if _reconcile:
+            store.put('capability_reconciliations',{
+                'id':_reconcile['id'],'capability_id':capid,'owner':owner,
+                'before_version_id':old['version_id'],'after_version_id':vid,
+                'package_sha256':m['package_sha256'],'evidence_sha256':_reconcile['evidence_sha256'],
+                'spec_sha256':_reconcile['spec_sha256'],'created_at':t,
+                'claim':'catalog_readback_only_not_activation_or_gain'},db)
     return value
+
+
+def reconcile_capability(store,value):
+    """Explicit trusted-root readback; discovery never accepts changed bytes."""
+    fields={'schema_version','capability_id','owner','expected_version_id','package_sha256','evidence_sha256'}
+    if not isinstance(value,dict) or set(value)-{'legacy_projection_sha256'}!=fields or type(value['schema_version']) is not int or value['schema_version']!=1:
+        raise ValueError('CAPABILITY_RECONCILIATION_INVALID')
+    for key in ('capability_id','expected_version_id'):
+        if not isinstance(value[key],str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',value[key]):
+            raise ValueError('CAPABILITY_RECONCILIATION_INVALID')
+    for key in ('package_sha256','evidence_sha256',*(['legacy_projection_sha256'] if 'legacy_projection_sha256' in value else [])):
+        if not isinstance(value[key],str) or not re.fullmatch(r'[0-9a-f]{64}',value[key]):
+            raise ValueError('CAPABILITY_RECONCILIATION_INVALID')
+    cap=store.get('capability_catalog',value['capability_id'])
+    if not cap or cap['owner']!=value['owner']:raise ValueError('CANONICAL_OWNER_CONFLICT')
+    if not store.read_artifact(value['evidence_sha256']).strip():raise ValueError('CAPABILITY_RECONCILIATION_EVIDENCE_REQUIRED')
+    h=digest(canonical(value));spec={**value,'id':'cr_'+h[:32],'spec_sha256':h}
+    register_capability(store,cap['path'],cap['owner'],kind=cap['kind'],scope=cap['scope'],capability_id=cap['id'],_reconcile=spec)
+    return store.get('capability_reconciliations',spec['id'])
+
+
+def drift_actions(store,limit=8):
+    """Bounded diagnostic pointers; no catalog update, model or installation."""
+    if type(limit) is not int or not 1<=limit<=50:raise ValueError('CAPABILITY_DRIFT_LIMIT_INVALID')
+    actions=[]
+    for cap in store.list('capability_catalog'):
+        if cap['status'] in {'retired','quarantined','hold'}:continue
+        try:_scope(store,cap['scope'])
+        except ValueError:continue
+        try:
+            current=_manifest(Path(cap['path']),cap['kind'])
+            if current['package_sha256']==cap['package_sha256']:continue
+            action={'capability_id':cap['id'],'owner':cap['owner'],'expected_version_id':cap['version_id'],
+                    'package_sha256':current['package_sha256'],'reason_code':'CAPABILITY_VERSION_DRIFT'}
+        except (OSError,ValueError):
+            action={'capability_id':cap['id'],'owner':cap['owner'],'expected_version_id':cap['version_id'],
+                    'reason_code':'CAPABILITY_READBACK_REQUIRED'}
+        actions.append(action)
+        if len(actions)>=limit:break
+    return actions
 
 
 def record_usage(store,receipt):

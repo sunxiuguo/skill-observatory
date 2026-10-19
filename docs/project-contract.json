@@ -12,7 +12,8 @@
     "docs/CAPABILITY_LIFECYCLE.md",
     "docs/LIFECYCLE_HANDOFF_PROMPT.md",
     "docs/PROACTIVE_REVIEW.md",
-    "docs/implementation/skill-rsi-2026-10-16/README.md"
+    "docs/implementation/skill-rsi-2026-10-16/README.md",
+    "docs/RETROSPECTIVE.md"
   ],
   "objectives": {
     "O1": {
@@ -33,7 +34,8 @@
         "tests/test_proactive.py::test_index_is_readonly_and_outside_transcript_is_never_opened",
         "tests/test_proactive.py::test_pending_survives_restart_and_partial_receipt_never_discards_work",
         "tests/test_collection_recovery.py::test_9mib_gap_reaches_terminal_and_restart_never_double_consumes",
-        "tests/test_evidence_builder.py::test_selection_build_is_change_driven_private_and_version_bound"
+        "tests/test_evidence_builder.py::test_selection_build_is_change_driven_private_and_version_bound",
+        "tests/test_proactive_manual.py::test_selected_session_preserves_daily_pending_and_scan_cursor"
       ]
     },
     "O2": {
@@ -94,7 +96,8 @@
         "tests/test_capture.py::test_skill_creation_requires_root_reviewed_forward_cases",
         "tests/test_capture.py::test_effectful_code_and_missing_origin_cannot_be_auto_installed",
         "tests/test_capabilities.py::test_logical_invocations_observation_dedup_attempts_and_stage_counts",
-        "tests/test_discovery_evidence.py::test_chinese_long_query_detects_frozen_version_drift"
+        "tests/test_discovery_evidence.py::test_chinese_long_query_detects_frozen_version_drift",
+        "tests/test_capability_reconciliation.py::test_explicit_reconciliation_preserves_history_and_does_not_certify_gain"
       ]
     },
     "O5": {
@@ -153,6 +156,7 @@
     ".github/workflows/ci.yml",
     "docs/RELIABILITY.md",
     "docs/PROACTIVE_REVIEW.md",
-    "docs/implementation/skill-rsi-2026-10-16/README.md"
+    "docs/implementation/skill-rsi-2026-10-16/README.md",
+    "docs/RETROSPECTIVE.md"
   ]
 }

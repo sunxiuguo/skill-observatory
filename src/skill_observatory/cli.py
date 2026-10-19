@@ -70,6 +70,7 @@ def main():
     p=sub.add_parser('register');p.add_argument('path');p.add_argument('--owner',required=True);p.add_argument('--license')
     p=sub.add_parser('capability-register');p.add_argument('path');p.add_argument('--owner',required=True);p.add_argument('--kind',choices=['skill','script'],default='skill');p.add_argument('--purpose');p.add_argument('--background');p.add_argument('--origin-file');p.add_argument('--scope',required=True);p.add_argument('--id')
     p=sub.add_parser('discover');p.add_argument('--query',default='');p.add_argument('--cwd',required=True)
+    p=sub.add_parser('capability-reconcile');p.add_argument('file',help='root-reviewed exact version/hash and evidence binding')
     p=sub.add_parser('artifact-import');p.add_argument('file')
     p=sub.add_parser('usage-import');p.add_argument('file')
     p=sub.add_parser('review-evidence-import');p.add_argument('file')
@@ -83,6 +84,7 @@ def main():
     p=sub.add_parser('native-family-collect');p.add_argument('--protocol-id',required=True);p.add_argument('--trial-id',required=True);p.add_argument('--transcript',required=True);p.add_argument('--execution-evidence',required=True,help='independent local owner signed execution evidence; not a candidate success claim')
 
     p=sub.add_parser('proactive-plan');p.add_argument('--index-db',required=True);p.add_argument('--exclude-session');p.add_argument('--days',type=int,default=7);p.add_argument('--limit',type=int,default=12)
+    p=sub.add_parser('retro-plan');p.add_argument('--index-db',required=True);p.add_argument('--session-id',default=os.environ.get('CODEX_THREAD_ID'),help='selected session; defaults to current CODEX_THREAD_ID')
     p=sub.add_parser('proactive-finish');p.add_argument('--batch-id',required=True);p.add_argument('--receipt',required=True)
     p=sub.add_parser('proactive-followup');p.add_argument('--batch-id',required=True);p.add_argument('--receipt',required=True)
     for command in ('evolution-proposal-bind','evolution-evaluation-bind'):
@@ -209,6 +211,12 @@ def main():
         elif args.command=='discover':
             from .capabilities import discover
             result=discover(s,args.query,args.cwd)
+        elif args.command=='capability-reconcile':
+            from .capabilities import reconcile_capability
+            result=reconcile_capability(s,json.loads(Path(args.file).read_text()))
+        elif args.command=='retro-plan':
+            from .proactive import plan_selected
+            result=plan_selected(s,args.index_db,args.session_id)
         elif args.command=='artifact-import':
             data=Path(args.file).read_bytes()
             if len(data)>8_000_000:raise ValueError('ARTIFACT_TOO_LARGE')

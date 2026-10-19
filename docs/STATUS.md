@@ -1,3 +1,42 @@
+# Retrospective workflow implementation and runtime rollout — 2026-10-19
+
+The authorized retrospective optimization is implemented and installed. The
+existing experience owner now reviews seven environment aspects while retaining
+root-cause attribution, deterministic-check preference, permission boundaries and
+the requirement for behavior evidence before changing an apparently unused rule.
+An independent forward exercise covered three mechanics fixtures and concluded
+`no_change`; it does not establish natural-task improvement.
+
+`retro-plan` selects one authorized session through the existing source adapter,
+diagnostic scope and worklist ledger. Selected reviews share the original finish
+protocol without consuming other daily items or advancing the historical cursor.
+Independent code review reproduced a daily/manual duplicate-work CAS deadlock.
+The repaired planner excludes pending selected work, and legacy batches can
+explicitly acknowledge a newer exact receipt while preserving its canonical
+review, follow-up obligation and supersession evidence. Scope mismatch, stale
+overwrite and ambiguous batch identities remain refusals.
+
+Capability reconciliation now binds root-reviewed installed bytes to exact prior
+versions and evidence. Discovery remains read-only; history and original authority
+are retained, including an explicitly pinned migration for unbound legacy
+projections. Three reviewed local catalog entries were reconciled. This records
+current package facts, not activation or gain.
+
+The original private background-review owner was requalified with the current
+tool-free model, exact schema/profile/source bindings and unchanged external
+scopes. One known pre-dispatch factual job then completed through the original
+kernel and returned `HOLD`, with terminal usage recorded and monetary cost
+unknown. Six historical unknown attempts and their jobs were preserved exactly.
+The final immutable service package is installed; actual API, all three workers,
+settings, owner proof and authority readbacks passed. The existing daily trigger
+is retained; no additional scheduler was introduced.
+
+Validation passed 357 backend tests with required real Docker execution, 9 actual
+API/DOM tests, distribution auditing and 56 focused tests against a clean installed
+wheel outside the checkout. Independent code review verified the reported
+concurrency fix. Final Git/remote/CI identity is checked at delivery. Skill gain
+remains HOLD, natural gain UNKNOWN and method RSI UNVERIFIED.
+
 # Daily factual work revision repair — 2026-10-19
 
 The daily review resumed the pending batch and examined a second bounded batch.

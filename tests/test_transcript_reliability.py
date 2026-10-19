@@ -52,6 +52,26 @@ def test_stable_cli_exec_identity_and_unverified_source_refusal(tmp_path):
   with pytest.raises(ValueError,match=reason):observe_session(s,p,'parent','codex-cli')
 
 
+@pytest.mark.parametrize('child',[False,True])
+def test_exact_163_desktop_and_native_child_shape_with_future_and_cli_refusals(tmp_path,child):
+ s,p,m=setup(tmp_path,'0.163.0-alpha.10.2',child=child)
+ source='codex-subagent' if child else 'codex-desktop';sid='child' if child else 'parent'
+ append(p,{'type':'task_complete','turn_id':'t'})
+ result=observe_session(s,p,sid,source)
+ assert result['new_events']==1 and result['execution_session_id']==sid
+ assert result['parent_session_id']==('parent' if child else None)
+ for patch,wrong_source,reason in [
+  ({'cli_version':'0.163.0-alpha.10.3'},source,'VERSION_UNVERIFIED'),
+  ({'originator':'codex_exec','source':'exec'},'codex-cli','SOURCE_SCHEMA_UNVERIFIED'),
+  ({'session_id':None},source,'SCHEMA_UNVERIFIED')]:
+  p.write_text(json.dumps({'type':'session_meta','payload':{**m,**patch}})+'\n')
+  with pytest.raises(ValueError,match=reason):observe_session(s,p,sid,wrong_source)
+ if child:
+  m['source']['subagent']['thread_spawn'].pop('parent_thread_id')
+  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
+  with pytest.raises(ValueError,match='SOURCE_SCHEMA_UNVERIFIED'):observe_session(s,p,sid,source)
+
+
 def test_child_hook_transcript_read_is_one_logical_invocation(tmp_path):
  s,p,m=setup(tmp_path,child=True)
  skill=tmp_path/'flow';skill.mkdir();text='---\nname: flow\ndescription: flow\n---\nActual bytes.\n';(skill/'SKILL.md').write_text(text);register(s,skill,'owner')

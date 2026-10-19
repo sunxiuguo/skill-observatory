@@ -34,6 +34,29 @@ def test_review_cannot_claim_missing_independent_truth(tmp_path):
  data['outcome']={'source':'runtime_only','status':'unverified'}
  assert accept_review(s,data,'trusted-v1')['status']=='reviewed'
 
+
+def test_environment_lens_is_optional_and_cannot_supply_missing_truth(tmp_path):
+ from jsonschema import validate,ValidationError
+ from skill_observatory.reviewer import review_schema
+ s=Store(tmp_path/'s');s.settings({'scopes':[str(tmp_path)]})
+ spool(s,dict(hook_event_name='Stop',session_id='s',turn_id='t',cwd=str(tmp_path)))
+ ingest(s);triage=process_one(s);run=s.list('runs')[0]
+ value={k:v for k,v in triage.items() if k not in {'id','status','reason_code','created_at'}}
+ value.update(reviewer_version='trusted-v1',evidence_manifest_sha256=s.artifact(canonical(run)))
+ value['findings']=[{'id':'finding','category':'insufficient_evidence','owner_kind':'unknown',
+     'severity':'low','evidence_ids':[],'fingerprint':'a'*64,'expected_code':'FACTS_REQUIRED',
+     'observed_code':'FACTS_MISSING','root_cause':'No check execution facts were observed.',
+     'confidence':'unknown','action':'collect_evidence'}]
+ value['findings'][0]['environment_aspect']='automated_checks'
+ validate(value,review_schema(run))
+ value['findings'][0]['environment_aspect']='arbitrary_new_authority'
+ with pytest.raises(ValidationError):validate(value,review_schema(run))
+ value['findings'][0]['environment_aspect']='information_access'
+ value['outcome']={'status':'accepted','source':'domain_oracle'}
+ with pytest.raises(ValueError,match='INDEPENDENT_OUTCOME'):accept_review(s,value,'trusted-v1')
+ value['outcome']={'status':'unverified','source':'runtime_only'}
+ assert accept_review(s,value,'trusted-v1')['outcome']['status']=='unverified'
+
 def test_pause_automatic_review_retains_queue(tmp_path):
  s=Store(tmp_path/'s');s.settings({'scopes':[str(tmp_path)],'automatic_review':False})
  spool(s,{'hook_event_name':'Stop','session_id':'s','turn_id':'t','cwd':str(tmp_path)})

@@ -6,6 +6,23 @@
 
 开工 → 按原 cwd 查询相关能力 → 查目的、来源、权限、当前版本 → 读取 Skill 或调用脚本 → 写调用收据 → 验收结果。阶段收尾 → 判断是否可复用 → existing/script/skill/no_change/hold → 冻结候选 → 正反例验证 → 安装 → 后续任务验证。
 
+### 安装后目录回读
+
+发现接口保持只读，`CAPABILITY_VERSION_DRIFT` 不自动接受新字节。原 owner 完成获授权安装后，根检查实际包、原安装收据和受影响行为，将紧凑证据导入为 artifact，再提交精确绑定：
+
+```json
+{"schema_version":1,"capability_id":"EXISTING_CAPABILITY","owner":"EXISTING_OWNER","expected_version_id":"PRIOR_VERSION","package_sha256":"REVIEWED_CURRENT_PACKAGE_SHA256","evidence_sha256":"LOCAL_REVIEW_ARTIFACT_SHA256"}
+```
+
+```sh
+skillobs --state PRIVATE_STATE capability-reconcile PRIVATE_BINDING
+```
+
+这是可信本地根对既有能力的目录修复入口，JSON 和证据本身不创造授权。它核对原 owner/作用域、精确父版本、当前包哈希及非空证据，在同一事务保留不可变版本与修复收据。重复调用幂等，第三版本、并发目录变化和 retired/quarantined/hold 能力均拒绝。历史来源、出生信息和使用不回填；新版本保持 registered，不继承激活或收益。周期自审输出有界漂移指针，根依原 owner 处理，不增加调度器或自动接受漂移。
+
+早期未绑定 capability/version 的 evaluator 投影若保留通用安装器 owner，默认仍拒绝冲突。当前根核实两个角色后，可在同一绑定中显式加入 `legacy_projection_sha256`，冻结旧投影完整 JSON 的 canonical SHA。此桥接仅接受未绑定的派生记录，保存原投影 artifact、canonical capability owner 和原 installation owner；原 owner 与已有授权保持原值，不发生权限转移。已绑定身份、其他 owner 的授权/候选/安装及旧记录漂移均拒绝。
+
+
 后台首屏：能力、待处理固化、调用数量和证据缺口摘要。主要路径：能力目录 → 来源与版本 → 项目/会话/场景调用历史；固化队列 → 决策理由与验证；运行和原有演进/环境页面保留。表格搜索、相关筛选、分页；细节抽屉保留上下文，浏览器刷新保持语言和草稿。
 
 ## 本地 CLI 合同

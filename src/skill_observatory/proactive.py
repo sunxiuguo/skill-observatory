@@ -74,12 +74,14 @@ def audit(store, stamp):
             "AND json_extract(data,'$.proposer_method_version_id') IS NOT NULL").fetchone()[0]
     health = snapshot(store.root, now=stamp)
     settings = store.settings()
+    from .capabilities import drift_actions
     return {'code_sha256': _code_identity(), 'counts': counts,
             'jobs': jobs, 'adapter_causes_7d': adapters, 'pending_experiments': pending,
             'held_experiments': held, 'candidate_readiness': readiness,
             'more_candidate_readiness': len(unstarted) > 16, 'collector_coverage_gaps': coverage,
             'evidence_build_actions': evidence_actions(store),
             'outcome_followups': outcome_followups(store,stamp),
+            'capability_drift_actions': drift_actions(store),
             'method_bound_candidates': method_bound, 'method_gain': 'UNVERIFIED',
             'workers': [{'id': lane, 'healthy': w['healthy'],
                          'reason_code': w.get('reason_code')} for lane, w in zip(LANES, health['workers'])],
@@ -198,7 +200,12 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
                             'fingerprint': digest(canonical([VERSION, prior_item['updated_at'], signal]))})
         overflow = len(sources) > 200 or len(fresh_sources) > 200
         candidates = []
-        scanned = 0; skipped_scope = 0; skipped_internal = 0
+        scanned = 0; skipped_scope = 0; skipped_internal = 0; skipped_selected = 0
+        selected_pending = {r[0] for r in db.execute(
+            "SELECT json_extract(data,'$.items[0].session_id') FROM entities "
+            "WHERE kind='proactive_review_batches' AND substr(id,1,9)='selected_' "
+            "AND json_extract(data,'$.mode')='selected_session' "
+            "AND json_extract(data,'$.status')='pending'")}
         lanes = {'fresh': iter(fresh_sources[:200]), 'history': iter(sources[:200]),
                  'due': iter(missing_due + due_sources)}
         # Weighted rotation reserves fresh work without starving sweep/due work,
@@ -224,6 +231,11 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
                 skipped_scope += 1
                 continue
             sid = row.get('session_id', row['id'])
+            if sid in selected_pending:
+                if sid not in visited:
+                    skipped_selected += 1
+                    visited.add(sid)
+                continue
             if sid in visited or (lane != 'due' and sid in due_ids):
                 continue
             visited.add(sid)
@@ -258,17 +270,87 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
         if not candidates:
             return {'status': 'no_change', 'items': [], 'scanned': scanned, 'more_sources': overflow,
                     'scope_skipped': skipped_scope, 'internal_skipped': skipped_internal,
+                    'selected_pending_skipped': skipped_selected,
                     'coverage': 'authorized_index_window_only', 'global_denominator': None}
         manifest = {'schema_version': 1, 'method_version': VERSION, 'created_at': now(),
                     'window_start': cutoff, 'window_end': int(stamp), 'items': candidates,
                     'scanned': scanned, 'more_sources': overflow,
                     'scope_skipped': skipped_scope, 'internal_skipped': skipped_internal,
+                    'selected_pending_skipped': skipped_selected,
                     'coverage': 'authorized_index_window_only', 'global_denominator': None}
         h = store.artifact(canonical(manifest))
         batch = {'id': 'active', 'batch_id': 'pr_' + h[:24], 'manifest_sha256': h,
                  'status': 'pending', **manifest}
         store.put('proactive_review_batches', batch, db)
         return batch
+
+
+def _diagnostic_scope(store, cwd):
+    cwd = Path(cwd).resolve()
+    if not _inside_scope(store, cwd):
+        raise ValueError('OUTSIDE_SCOPE')
+    if not any(cwd == Path(s).resolve() or Path(s).resolve() in cwd.parents
+               for s in store.settings().get('diagnostic_scopes', [])):
+        raise ValueError('RETRO_DIAGNOSTIC_SCOPE_REQUIRED')
+
+
+def plan_selected(store, index_db, session_id, *, stamp=None):
+    """Select one authorized session using the existing worklist and adapter."""
+    if not isinstance(session_id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', session_id):
+        raise ValueError('RETRO_SESSION_REQUIRED')
+    index_db = Path(index_db)
+    if index_db.is_symlink() or not index_db.is_file():
+        raise ValueError('CODEX_INDEX_REQUIRED')
+    with closing(sqlite3.connect(index_db.resolve().as_uri() + '?mode=ro', uri=True)) as index:
+        columns = {r[1]: r[2].upper() for r in index.execute('PRAGMA table_info(threads)')}
+        if any(columns.get(k) != t for k, t in
+               {'id': 'TEXT', 'rollout_path': 'TEXT', 'cwd': 'TEXT', 'updated_at': 'INTEGER'}.items()):
+            raise ValueError('CODEX_INDEX_SCHEMA_UNVERIFIED')
+        index.row_factory = sqlite3.Row
+        row = index.execute('SELECT id,rollout_path,cwd,updated_at FROM threads WHERE id=?', (session_id,)).fetchone()
+    if not row:
+        raise ValueError('RETRO_SESSION_NOT_FOUND')
+    if any(not isinstance(row[k], str) or not row[k] for k in ('cwd', 'rollout_path')):
+        raise ValueError('CODEX_INDEX_ROW_INVALID')
+    if type(row['updated_at']) is not int or not 0 <= row['updated_at'] <= 32503680000:
+        raise ValueError('CODEX_INDEX_TIME_UNVERIFIED')
+    _diagnostic_scope(store, row['cwd'])
+    item = _source(dict(row), store, index_db.resolve().parent)
+    slot = 'selected_' + digest(session_id.encode())[:24]
+    with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        daily = store.get('proactive_review_batches', 'active', db)
+        if daily and daily['status'] == 'pending':
+            selected = [i for i in daily['items'] if i.get('session_id') == session_id
+                        and i['id'] not in daily.get('results', {})]
+            if selected:
+                _diagnostic_scope(store, selected[0]['cwd'])
+                return {**daily, 'items': selected, 'mode': 'selected_from_daily',
+                        'total_batch_items': len(daily['items']),
+                        'source_changed_since_plan': selected[0]['fingerprint'] != item['fingerprint'],
+                        'claim': 'selected_pointer_only_not_review_or_gain'}
+        previous = store.get('proactive_review_items', item['id'], db) or {}
+        basis = digest(canonical(previous))
+        current = store.get('proactive_review_batches', slot, db)
+        if current and current['status'] == 'pending' and current.get('review_basis_sha256') == basis:
+            return {**current, 'resumed': True}
+        if current:
+            # Retain the immutable prior work/receipt even when a new root review
+            # requires a fresh selected plan. Its old receipt still fails CAS.
+            store.put('proactive_review_batches', {**current, 'id': current['batch_id']}, db)
+        if previous:
+            item['previous_review'] = {k: previous[k] for k in
+                ('disposition', 'evidence_sha256', 'consecutive_holds', 'escalate', 'followups') if k in previous}
+        stamp = time.time() if stamp is None else stamp
+        manifest = {'schema_version': 1, 'method_version': VERSION, 'created_at': now(),
+                    'mode': 'selected_session', 'window_end': int(stamp), 'items': [item],
+                    'review_basis_sha256': basis, 'coverage': 'selected_authorized_session_only',
+                    'global_denominator': None, 'more_sources': False, 'scanned': 1}
+        h = store.artifact(canonical(manifest))
+        batch = {'id': slot, 'batch_id': 'pr_' + h[:24], 'manifest_sha256': h,
+                 'status': 'pending', **manifest}
+        store.put('proactive_review_batches', batch, db)
+        return {**batch, 'claim': 'selected_pointer_only_not_review_or_gain'}
 
 
 def finish(store, batch_id, receipt, *, stamp=None):
@@ -286,13 +368,20 @@ def finish(store, batch_id, receipt, *, stamp=None):
     receipt_sha = digest(canonical(receipt))
     with store.connect() as db:
         db.execute('BEGIN IMMEDIATE')
-        batch = store.get('proactive_review_batches', 'active', db)
-        if not batch or batch['batch_id'] != batch_id:
+        matches = db.execute("SELECT data FROM entities WHERE kind='proactive_review_batches' "
+                             "AND json_extract(data,'$.batch_id')=?", (batch_id,)).fetchall()
+        if not matches:
             raise ValueError('PROACTIVE_BATCH_MISMATCH')
+        batches = [json.loads(row[0]) for row in matches]
+        # A selected slot may also have its exact historical copy after rebase.
+        if len({canonical({k:v for k,v in b.items() if k!='id'}) for b in batches}) != 1:
+            raise ValueError('PROACTIVE_BATCH_AMBIGUOUS')
+        batch = next((b for b in batches if b['id'] != batch_id), batches[0])
         original = json.loads(store.read_artifact(batch['manifest_sha256']))
         by_id = {item['id']: item for item in original['items']}
         results = batch.get('results', {})
         source_changes = batch.get('source_changes', {})
+        superseded = batch.get('superseded_reviews', {})
         seen = set()
         for result in receipt['results']:
             if not isinstance(result, dict) or set(result) != {'id', 'fingerprint', 'disposition', 'evidence_sha256', 'next_check_at'} \
@@ -300,6 +389,8 @@ def finish(store, batch_id, receipt, *, stamp=None):
                     or result['disposition'] not in DISPOSITIONS:
                 raise ValueError('PROACTIVE_RESULT_INVALID')
             seen.add(result['id']); item = by_id[result['id']]
+            if batch.get('mode') == 'selected_session':
+                _diagnostic_scope(store, item['cwd'])
             if item['fingerprint'] != result['fingerprint']:
                 raise ValueError('PROACTIVE_SOURCE_MISMATCH')
             if result['id'] in results:
@@ -325,16 +416,34 @@ def finish(store, batch_id, receipt, *, stamp=None):
                 changed = True
             if changed: source_changes[item['id']] = True
             old = store.get('proactive_review_items', item['id'], db) or {}
+            stale = (batch.get('mode') == 'selected_session'
+                     and digest(canonical(old)) != batch['review_basis_sha256'])
+            stale = stale or (old.get('batch_id') not in {None, batch_id}
+                              and old.get('reviewed_at', '') > batch.get('created_at', ''))
+            if stale:
+                if (old.get('session_id') == item.get('session_id') and old.get('cwd') == item.get('cwd')
+                        and old.get('evidence_sha256') == result['evidence_sha256']
+                        and old.get('disposition') == result['disposition']):
+                    results[result['id']] = result
+                    if changed or old.get('fingerprint') != item['fingerprint']:
+                        source_changes[item['id']] = True
+                    superseded[item['id']] = {
+                        'review_sha256': store.artifact(canonical(old)),
+                        'evidence_sha256': old['evidence_sha256'], 'batch_id': old.get('batch_id')}
+                    continue  # Explicit acknowledgement never overwrites the newer review or its follow-up.
+                raise ValueError('PROACTIVE_REVIEW_CAS_MISMATCH')
             holds = (old.get('consecutive_holds', 0) + 1) if result['disposition'] == 'hold' else 0
             store.put('proactive_review_items', {**item, 'disposition': 'follow_up' if changed else result['disposition'],
                 'source_changed': changed,
                 'evidence_sha256': result['evidence_sha256'], 'eligible_at': stamp + 1 if changed else due,
                 'reviewed_at': now(), 'root_session_id': receipt['root_session_id'],
+                'batch_id': batch_id,
                 'consecutive_holds': holds, 'escalate': holds >= 3,
                 **({'followups': old['followups']} if old.get('followups') else {})}, db)
             results[result['id']] = result
         store.artifact(canonical(receipt))
-        batch.update(results=results, source_changes=source_changes, last_receipt_sha256=receipt_sha,
+        batch.update(results=results, source_changes=source_changes, superseded_reviews=superseded,
+                     last_receipt_sha256=receipt_sha,
                      status='completed' if len(results) == len(by_id) else 'pending')
         store.put('proactive_review_batches', batch, db)
         store.put('proactive_review_cycles', {'id': batch_id, 'status': batch['status'],
