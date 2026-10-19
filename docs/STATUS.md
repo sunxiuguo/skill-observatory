@@ -1,3 +1,34 @@
+# Daily factual work revision repair — 2026-10-19
+
+The daily review resumed the pending batch and examined a second bounded batch.
+Missing historical sources, an uncertified source schema, oversized records and
+interrupted children remain explicit gaps. Active and domain-specific work stays
+with its original owner; this is not full-window or natural-task coverage.
+
+A real ledger readback reproduced obsolete factual work remaining actionable
+after the current source/policy revision was already built. Planning now marks
+older pending revisions superseded in the same transaction, retaining their
+source identity, missing fields and successor. Historical built evidence remains
+intact. Returning to an earlier policy reactivates its exact pending item; new
+source facts remain pending. Self-review and material progress use these states,
+while unrecognized work states remain visible.
+
+A second regression reproduced a cached historical plan returning a capsule from
+a different policy revision. Reuse now requires the exact selected capsule and
+current run manifest, otherwise it refuses without attaching evidence or
+reopening an attempt. Interruption rollback, source drift, policy return and
+unchanged idempotency are covered. Actual reconciliation preserved the existing
+capsule and attempt inventory and made no model call.
+
+Validation passed 326 backend tests with required real Docker execution. The
+actual API/DOM, contract, distribution and isolated wheel checks are recorded at
+delivery. The existing immutable service and global Skills were not upgraded.
+The background reviewer remains blocked because its fixed model is absent from
+the canonical routable pool; ordinary child qualification cannot replace that
+owner's background proof. New independent truth, feasible frozen all-attempt
+budgets and natural follow-up evidence remain open. Skill gain is HOLD, natural
+gain UNKNOWN and method RSI UNVERIFIED.
+
 # Daily factual ingress repair — 2026-10-18
 
 The resumed daily review completed a bounded source pass and continued into the

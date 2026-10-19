@@ -43,7 +43,10 @@ def project(store,stamp=None):
             chain=item.get('protocol_id',item.get('candidate_id',item['id']))
             prior=decisions.get(chain)
             if prior is None or (kind=='verdicts' and prior[0]!='verdicts'):decisions[chain]=(kind,item)
-        elif kind=='evidence_builds':facts.setdefault(item['run_id'],item)
+        elif kind=='evidence_builds' and item.get('status')!='superseded':
+            prior=facts.get(item['run_id'])
+            if prior is None or item.get('status') in {'awaiting_native_selection','blocked'}:
+                facts[item['run_id']]=item
         elif kind=='task_family_attempts':trials.setdefault(item['id'],item)
         elif kind=='installations':installations.append(item)
         elif kind=='candidates':candidates[item['id']]=item

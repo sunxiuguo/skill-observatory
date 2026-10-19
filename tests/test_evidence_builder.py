@@ -76,3 +76,101 @@ def test_one_ineligible_historical_run_does_not_block_current_fact_work(tmp_path
     assert any(r['run_id']=='outside' and r['status']=='blocked' and r['missing']==['OUTSIDE_SCOPE'] for r in rows)
     assert any(r['run_id']==run['id'] and r['status']=='awaiting_native_selection' for r in rows)
     with pytest.raises(ValueError,match='OUTSIDE_SCOPE'):evidence_plan(s,'outside')
+
+
+def test_changed_policy_retires_old_pending_work_without_losing_evidence(tmp_path):
+    from skill_observatory.proactive import evidence_actions
+    from skill_observatory.store import Store
+    s,run,facts=fixture(tmp_path)
+    old=evidence_plan(s,run['id'])[0]
+    s.settings({'diagnostic_scopes':[str(tmp_path)]})
+    built=build_selected_evidence(s,facts)
+    current=evidence_plan(s,run['id'])[0]
+    assert current['id']!=old['id'] and current['status']=='built'
+    retired=s.get('evidence_builds',old['id'])
+    assert retired['status']=='superseded' and retired['superseded_by']==current['id']
+    assert retired['source_fingerprint']==old['source_fingerprint']
+    assert not evidence_actions(Store(s.root))
+    assert s.get('run_evidence',run['id'])==built and not s.list('review_attempts')
+
+
+def test_new_source_stays_pending_and_old_built_receipt_is_preserved(tmp_path):
+    from skill_observatory.proactive import evidence_actions
+    from skill_observatory.runtime import spool,ingest
+    s,run,facts=fixture(tmp_path)
+    built=build_selected_evidence(s,facts)
+    old=evidence_plan(s,run['id'])[0]
+    spool(s,dict(hook_event_name='Stop',session_id='s',turn_id='t',cwd=str(tmp_path),tool_use_id='new-source'))
+    ingest(s)
+    current=evidence_plan(s,run['id'])[0]
+    assert current['id']!=old['id'] and current['status']=='awaiting_native_selection'
+    assert [r['id'] for r in evidence_actions(s)]==[current['id']]
+    assert s.get('evidence_builds',old['id'])==old
+    assert s.get('run_evidence',run['id'])==built
+    assert 'EVIDENCE_CAPSULE_RUN_DRIFT' in build_capsule(s,s.get('runs',run['id']))['missing']
+    assert not s.list('review_attempts')
+
+
+def test_policy_return_reactivates_exact_pending_work(tmp_path):
+    from skill_observatory.proactive import evidence_actions
+    s,run,facts=fixture(tmp_path)
+    old=evidence_plan(s,run['id'])[0]
+    s.settings({'diagnostic_scopes':[str(tmp_path)]})
+    other=evidence_plan(s,run['id'])[0]
+    s.settings({'diagnostic_scopes':[]})
+    active=evidence_plan(s,run['id'])[0]
+    assert active['id']==old['id'] and active['status']=='awaiting_native_selection'
+    assert s.get('evidence_builds',other['id'])['status']=='superseded'
+    assert [r['id'] for r in evidence_actions(s)]==[old['id']]
+    assert not s.list('review_attempts')
+
+
+def test_returned_pending_policy_is_visible_ahead_of_historical_build(tmp_path):
+    from skill_observatory.semantic_progress import project
+    s,run,facts=fixture(tmp_path)
+    old=evidence_plan(s,run['id'])[0]
+    s.settings({'diagnostic_scopes':[str(tmp_path)]})
+    build_selected_evidence(s,facts)
+    s.settings({'diagnostic_scopes':[]})
+    evidence_plan(s,run['id'])
+    with s.connect() as db:db.execute('DELETE FROM jobs')
+    progress=project(s)
+    assert progress['first_blocker']=='DIAGNOSTIC_FACTS_REQUIRED'
+    assert progress['blocking_item']['id']==old['id']
+
+
+def test_supersession_failure_rolls_back_new_and_retired_work(tmp_path,monkeypatch):
+    s,run,facts=fixture(tmp_path)
+    old=evidence_plan(s,run['id'])[0]
+    before=s.list('evidence_builds')
+    s.settings({'diagnostic_scopes':[str(tmp_path)]})
+    put=s.put
+    def fail_retirement(kind,value,db=None):
+        if kind=='evidence_builds' and value.get('status')=='superseded':
+            raise OSError('interrupted retirement')
+        return put(kind,value,db)
+    monkeypatch.setattr(s,'put',fail_retirement)
+    with pytest.raises(OSError,match='interrupted retirement'):evidence_plan(s,run['id'])
+    assert s.list('evidence_builds')==before
+    assert s.get('evidence_builds',old['id'])==old and not s.list('review_attempts')
+
+
+def test_historical_build_cannot_return_another_policy_capsule(tmp_path):
+    s,run,facts=fixture(tmp_path)
+    first=build_selected_evidence(s,facts)
+    s.settings({'diagnostic_scopes':[str(tmp_path)]})
+    second=build_selected_evidence(s,facts)
+    assert first['capsule_sha256']!=second['capsule_sha256']
+    s.settings({'diagnostic_scopes':[]})
+    with pytest.raises(ValueError,match='EVIDENCE_BUILD_READBACK_REQUIRED'):
+        build_selected_evidence(s,facts)
+    assert s.get('run_evidence',run['id'])==second
+    assert not s.list('review_attempts')
+
+
+def test_unrecognized_work_status_is_not_hidden_as_superseded(tmp_path):
+    from skill_observatory.proactive import evidence_actions
+    s,run,facts=fixture(tmp_path)
+    item=evidence_plan(s,run['id'])[0]
+    s.put('evidence_builds',{**item,'status':'readback_required'})
+    assert evidence_actions(s)[0]['status']=='readback_required'

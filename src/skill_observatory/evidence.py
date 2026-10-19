@@ -217,6 +217,23 @@ def evidence_plan(store, run_id=None, limit=8):
         return result
 
 
+def _activate_build(store,row,db):
+    """One pending source/policy revision per run; retain historical receipts."""
+    if row['status']=='superseded':
+        row={**row,'status':row['superseded_from_status']}
+        for field in ('superseded_from_status','superseded_by','superseded_at'):
+            row.pop(field)
+    store.put('evidence_builds',row,db)
+    prior=db.execute("SELECT data FROM entities WHERE kind='evidence_builds' AND id!=? "
+        "AND json_extract(data,'$.run_id')=? AND json_extract(data,'$.status') IN "
+        "('awaiting_native_selection','blocked')",(row['id'],row['run_id'])).fetchall()
+    for raw in prior:
+        old=json.loads(raw[0])
+        store.put('evidence_builds',{**old,'status':'superseded','superseded_from_status':old['status'],
+            'superseded_by':row['id'],'superseded_at':now()},db)
+    return row
+
+
 def _plan_runs(store,runs,db,*,explicit):
     result=[]
     for run in runs:
@@ -228,10 +245,11 @@ def _plan_runs(store,runs,db,*,explicit):
             id_='facts_blocked_'+fingerprint[:32]
             row=store.get('evidence_builds',id_,db) or {'id':id_,'run_id':run['id'],'source_fingerprint':fingerprint,
                  'status':'blocked','missing':[code],'observed_version_ids':[],'source_class':'unknown','created_at':now(),'model_attempts':0}
-            store.put('evidence_builds',row,db);result.append(row);continue
+            result.append(_activate_build(store,row,db));continue
         id_='facts_'+digest(canonical([run['id'],projection['source_fingerprint'],BUILDER_VERSION,projection['policy_digest']]))[:32]
         old=store.get('evidence_builds',id_,db)
         if old:
+            old=_activate_build(store,old,db)
             if explicit or old['status']!='built':result.append(old)
             continue
         version_ids=sorted({u['version_id'] for u in store.list('capability_invocations') if
@@ -239,7 +257,7 @@ def _plan_runs(store,runs,db,*,explicit):
         row={'id':id_,'run_id':run['id'],**projection,'observed_version_ids':version_ids,
              'status':'awaiting_native_selection','missing':['TASK_GOAL_REQUIRED','SUCCESS_CRITERIA_REQUIRED']+([] if version_ids else ['OBSERVED_CAPABILITY_VERSION_REQUIRED']),
              'created_at':now(),'model_attempts':0}
-        store.put('evidence_builds',row,db);result.append(row)
+        result.append(_activate_build(store,row,db))
     return result
 
 
@@ -257,7 +275,13 @@ def build_selected_evidence(store, selection):
     h=store.artifact(canonical(value))
     if plan.get('selection_sha256'):
         if plan['selection_sha256']!=h:raise ValueError('EVIDENCE_BUILD_ALREADY_SELECTED')
-        return store.get('run_evidence',selection['run_id'])
+        with store.connect() as db:
+            db.execute('BEGIN')
+            receipt=store.get('run_evidence',selection['run_id'],db)
+            current=store.get('runs',selection['run_id'],db)
+            if not receipt or receipt.get('capsule_sha256')!=h or receipt.get('run_manifest_sha256')!=digest(canonical(current)):
+                raise ValueError('EVIDENCE_BUILD_READBACK_REQUIRED')
+            return receipt
     receipt=attach_evidence(store,value)
     plan.update(status='built',missing=[],selection_sha256=h,completed_at=now())
     store.put('evidence_builds',plan)

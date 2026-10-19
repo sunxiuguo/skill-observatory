@@ -403,7 +403,7 @@ def follow_up(store, batch_id, receipt, *, stamp=None):
 
 def evidence_actions(store):
     with store.connect() as db:
-        rows=db.execute("SELECT data FROM entities WHERE kind='evidence_builds' AND json_extract(data,'$.status')!='built' ORDER BY json_extract(data,'$.created_at') LIMIT 4").fetchall()
+        rows=db.execute("SELECT data FROM entities WHERE kind='evidence_builds' AND json_extract(data,'$.status') NOT IN ('built','superseded') ORDER BY json_extract(data,'$.created_at') LIMIT 4").fetchall()
     return [{k:r[k] for k in ('id','run_id','source_fingerprint','status','missing','observed_version_ids')} for r in [json.loads(x[0]) for x in rows]]
 
 
