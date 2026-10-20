@@ -12,8 +12,10 @@ after completed selections, unresolved-gap retention and single-lane fallback
 pass focused checks. Actual ledger readback exposes version-bound work while
 retaining missing-version actions. One reviewed historical maintenance run was
 bound to its observed version and source events through the existing evidence
-builder; its known pre-dispatch job resumed. This is selected review input,
-not an independent improvement evaluation or a natural-task sample.
+builder; its known pre-dispatch job resumed and completed through the original
+background reviewer with `NO_CHANGE` and recorded usage. Monetary cost and
+independent improvement evidence remain unknown. This is selected review
+input, not an independent improvement evaluation or a natural-task sample.
 
 The daily review resumed the prior batch and continued into a new bounded batch.
 Missing exact source files, source/cwd mismatches, uncertified versions and
