@@ -174,3 +174,38 @@ def test_unrecognized_work_status_is_not_hidden_as_superseded(tmp_path):
     item=evidence_plan(s,run['id'])[0]
     s.put('evidence_builds',{**item,'status':'readback_required'})
     assert evidence_actions(s)[0]['status']=='readback_required'
+
+
+def test_self_review_surfaces_version_bound_work_behind_unresolved_history(tmp_path):
+    from skill_observatory.proactive import evidence_actions
+    from skill_observatory.store import Store
+    s=Store(tmp_path/'state')
+    for lane,versions in [('gap',[]),('bound',['version'])]:
+        for i in range(6):
+            s.put('evidence_builds',{'id':f'{lane}_{i}','run_id':f'run_{lane}_{i}',
+                'source_fingerprint':f'source_{lane}_{i}','status':'awaiting_native_selection',
+                'missing':['TASK_GOAL_REQUIRED']+([] if versions else ['OBSERVED_CAPABILITY_VERSION_REQUIRED']),
+                'observed_version_ids':versions,'created_at':f'2026-10-{10 if lane=="gap" else 11:02}T00:00:0{i}+00:00'})
+    for status in ('built','superseded'):
+        s.put('evidence_builds',{'id':status,'status':status,'created_at':'2000'})
+    before=s.list('evidence_builds')
+    first=evidence_actions(s)
+    assert [r['id'] for r in first]==['gap_0','bound_0','gap_1','bound_1']
+    assert evidence_actions(Store(s.root))==first
+    assert s.list('evidence_builds')==before
+    assert not s.list('review_attempts') and not s.list('installations')
+    for id_ in ('bound_0','bound_1'):
+        s.put('evidence_builds',{**s.get('evidence_builds',id_),'status':'built'})
+    assert [r['id'] for r in evidence_actions(s)]==['gap_0','bound_2','gap_1','bound_3']
+
+
+@pytest.mark.parametrize('versions',[[],['version']])
+def test_self_review_fills_action_limit_from_the_available_lane(tmp_path,versions):
+    from skill_observatory.proactive import evidence_actions
+    from skill_observatory.store import Store
+    s=Store(tmp_path/'state')
+    for i in range(5):
+        s.put('evidence_builds',{'id':str(i),'run_id':str(i),'source_fingerprint':str(i),
+            'status':'awaiting_native_selection','missing':['TASK_GOAL_REQUIRED'],
+            'observed_version_ids':versions,'created_at':'2026-10-10'})
+    assert [r['id'] for r in evidence_actions(s)]==['0','1','2','3']

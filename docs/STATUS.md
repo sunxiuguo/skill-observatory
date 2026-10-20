@@ -1,3 +1,28 @@
+# Daily factual-action visibility repair — 2026-10-20
+
+Self-review reproduced a head-of-line obstruction: the four oldest factual
+actions all lacked observed capability versions, hiding later selections with
+exact version evidence. The bounded read-only projection now interleaves the
+oldest version-bound selections with unresolved gaps. Each lane can fill the
+available slots when the other is empty; built and superseded work stays out.
+This changes neither source facts nor admission, installation or final truth.
+
+The old projection failed the regression. Restart, stable ordering, progress
+after completed selections, unresolved-gap retention and single-lane fallback
+pass focused checks. Actual ledger readback exposes version-bound work while
+retaining missing-version actions. One reviewed historical maintenance run was
+bound to its observed version and source events through the existing evidence
+builder; its known pre-dispatch job resumed. This is selected review input,
+not an independent improvement evaluation or a natural-task sample.
+
+The daily review resumed the prior batch and continued into a new bounded batch.
+Missing exact source files, source/cwd mismatches, uncertified versions and
+oversized records remain coverage gaps. Existing domain work and active roots
+retain ownership. Applicable backend, distribution, isolated installation and
+final Git/CI checks are recorded at delivery. The existing immutable service
+was not upgraded. Skill gain remains HOLD, natural gain UNKNOWN and method
+RSI UNVERIFIED.
+
 # Retrospective workflow implementation and runtime rollout — 2026-10-19
 
 The authorized retrospective optimization is implemented and installed. The

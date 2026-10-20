@@ -511,8 +511,20 @@ def follow_up(store, batch_id, receipt, *, stamp=None):
 
 
 def evidence_actions(store):
+    """Interleave version-bound selections and unresolved gaps, oldest in each.
+
+    A missing historical version must stay visible without occupying every
+    bounded action slot and hiding work whose exact version was observed.
+    This is a read-only projection, not evidence certification or dispatch.
+    """
     with store.connect() as db:
-        rows=db.execute("SELECT data FROM entities WHERE kind='evidence_builds' AND json_extract(data,'$.status') NOT IN ('built','superseded') ORDER BY json_extract(data,'$.created_at') LIMIT 4").fetchall()
+        rows=db.execute("SELECT data FROM (SELECT id,data,row_number() OVER (PARTITION BY "
+            "CASE WHEN json_extract(data,'$.status')='awaiting_native_selection' "
+            "AND json_array_length(json_extract(data,'$.observed_version_ids'))>0 THEN 1 ELSE 0 END "
+            "ORDER BY json_extract(data,'$.created_at'),id) AS lane_position "
+            "FROM entities WHERE kind='evidence_builds' "
+            "AND json_extract(data,'$.status') NOT IN ('built','superseded')) "
+            "ORDER BY lane_position,json_extract(data,'$.created_at'),id LIMIT 4").fetchall()
     return [{k:r[k] for k in ('id','run_id','source_fingerprint','status','missing','observed_version_ids')} for r in [json.loads(x[0]) for x in rows]]
 
 
