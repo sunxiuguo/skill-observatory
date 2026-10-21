@@ -14,6 +14,7 @@ DESKTOP_APP_ORIGINATOR = "Codex Desktop"
 ALPHA_17 = "0.162.0-alpha.17.2"
 ALPHA_10_APP = "0.163.0-alpha.10.2"
 VERIFIED_APP_VERSIONS = {ALPHA_17, ALPHA_10_APP}
+VERIFIED_EXEC_VERSIONS = {"0.162.1", "0.163.0"}
 CHILD_TERMINAL_EVENTS = {"SubagentStart", "SubagentStop"}
 
 
@@ -58,7 +59,7 @@ def _read_meta(store, path, source):
     if version in {"0.160.0", "0.160.1", "0.162.0-alpha.2"}:
         # These verified shapes use id as the transcript/session identity.
         pass
-    elif version == "0.162.1":
+    elif version in VERIFIED_EXEC_VERSIONS:
         # Verified standalone CLI exec shape. App/child shapes need their own proof.
         if source != 'codex-cli' or meta.get('originator') != 'codex_exec' or meta.get('source') != 'exec':
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')

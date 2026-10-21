@@ -1,3 +1,31 @@
+# Exact stable CLI transcript ingress — 2026-10-21
+
+The scoped daily review resumed the previous batch and reviewed a second batch:
+24 conversation obligations across 23 sessions. Nineteen body reads covered 18
+distinct sessions; five exact sources were unavailable, and two oversized
+records remain hashed coverage gaps. Changed sources retain immediate follow-up;
+active domain work remains with its original owner. This is bounded selection,
+not full-window coverage or a natural-task denominator.
+
+Two real standalone CLI transcripts were rejected solely because their exact
+`0.163.0` version was not admitted. Their metadata and record structures were
+checked before extending the existing exec adapter. Admission still requires
+the CLI source, `codex_exec` originator, `exec` source shape and matching logical
+and execution identities. Desktop/child substitutions, mismatched identities and
+unverified versions remain refusals. Automation provenance is not natural-use
+proof.
+
+The original regression failed before the change. Both real sources drained in
+isolated ledgers to 14 and 89 events; restart reads produced no new events.
+Exact Skill-byte attribution, drift refusal, planner identity and source/version
+rejection checks pass. Validation passed 362 backend tests with required Docker
+execution and 15 transcript tests against a clean installed wheel outside the
+checkout; contract and distribution audits pass. Final Git/remote/CI identity is
+checked at delivery. The existing immutable service was not upgraded, and no
+global Skill was changed. Independent final truth, all-attempt costs and later
+natural samples remain incomplete: Skill gain HOLD, natural gain UNKNOWN and
+method RSI UNVERIFIED.
+
 # Daily factual-action visibility repair — 2026-10-20
 
 Self-review reproduced a head-of-line obstruction: the four oldest factual

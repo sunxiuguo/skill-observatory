@@ -20,7 +20,7 @@ def test_current_transcript_exact_bytes_and_cursor(tmp_path):
     assert set(inv[0]['stages'])=={'mentioned','verified_read'}
     assert observe_session(s,p,'s','codex-desktop')['new_events']==0
     p.write_text(p.read_text().replace('0.162.0-alpha.2','0.163.0'))
-    with pytest.raises(ValueError,match='VERSION_UNVERIFIED'):observe_session(s,p,'s','codex-desktop')
+    with pytest.raises(ValueError,match='SOURCE_SCHEMA_UNVERIFIED'):observe_session(s,p,'s','codex-desktop')
 
 
 def test_call_time_version_stays_bound_after_disk_change(tmp_path):

@@ -40,16 +40,52 @@ def test_certified_cli_and_app_schema_and_source_controls(tmp_path,version,sourc
   with pytest.raises(ValueError,match='SCHEMA_UNVERIFIED'):observe_session(s,p,'parent',source)
 
 
-def test_stable_cli_exec_identity_and_unverified_source_refusal(tmp_path):
- s,p,m=setup(tmp_path,'0.162.1');m.update(originator='codex_exec',source='exec')
+@pytest.mark.parametrize('version',['0.162.1','0.163.0'])
+def test_stable_cli_exec_identity_and_unverified_source_refusal(tmp_path,version):
+ s,p,m=setup(tmp_path,version);m.update(originator='codex_exec',source='exec')
  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
  append(p,{'type':'task_complete','turn_id':'t'})
  assert observe_session(s,p,'parent','codex-cli')['new_events']==1
  for source in ['codex-desktop','codex-subagent']:
   with pytest.raises(ValueError,match='SOURCE_SCHEMA_UNVERIFIED'):observe_session(s,p,'parent',source)
- for patch,reason in [({'source':'vscode'},'SOURCE_SCHEMA_UNVERIFIED'),({'originator':'Codex Desktop'},'SOURCE_SCHEMA_UNVERIFIED'),({'session_id':'other'},'SCHEMA_UNVERIFIED'),({'session_id':None},'SCHEMA_UNVERIFIED'),({'cli_version':'0.162.2'},'VERSION_UNVERIFIED')]:
+ for patch,reason in [({'source':'vscode'},'SOURCE_SCHEMA_UNVERIFIED'),({'originator':'Codex Desktop'},'SOURCE_SCHEMA_UNVERIFIED'),({'session_id':'other'},'SCHEMA_UNVERIFIED'),({'session_id':None},'SCHEMA_UNVERIFIED'),({'cli_version':'0.162.2'},'VERSION_UNVERIFIED'),({'cli_version':'0.163.1'},'VERSION_UNVERIFIED')]:
   p.write_text(json.dumps({'type':'session_meta','payload':{**m,**patch}})+'\n')
   with pytest.raises(ValueError,match=reason):observe_session(s,p,'parent','codex-cli')
+
+
+def test_stable_163_exec_exact_read_restart_and_identity_refusal(tmp_path):
+ s,p,m=setup(tmp_path,'0.163.0');m.update(originator='codex_exec',source='exec',thread_source='automation')
+ p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
+ skill=tmp_path/'flow';skill.mkdir();text='---\nname: flow\ndescription: flow\n---\nExact instructions.\n'
+ (skill/'SKILL.md').write_text(text);register(s,skill,'owner')
+ append(p,{'turn_id':'t'},'turn_context')
+ append(p,{'type':'task_started','turn_id':'t'})
+ append(p,{'type':'custom_tool_call','call_id':'call','name':'exec','input':'cat '+str(skill/'SKILL.md')},'response_item')
+ append(p,{'type':'custom_tool_call_output','call_id':'call','output':text},'response_item')
+ append(p,{'type':'task_complete','turn_id':'t'})
+ with pytest.raises(ValueError,match='SESSION_ID_MISMATCH'):observe_session(s,p,'other','codex-cli')
+ assert s.list('cursors')==[] and not list((s.root/'spool').glob('*.json'))
+ observed=observe_session(s,p,'parent','codex-cli')
+ assert observed['new_events']==4 and observed['execution_session_id']=='parent'
+ assert s.list('cursors')[0]['root_session_id']=='parent'
+ from skill_observatory.proactive import _source
+ selected=_source({'id':'parent','cwd':str(tmp_path),'rollout_path':str(p),'updated_at':1},s)
+ assert selected['signal']['source']=='codex-cli' and 'reason_code' not in selected['signal']
+ assert selected['evidence_class']=='unclassified_execution'
+ ingest(s);inv=s.list('capability_invocations')
+ assert len(inv)==1 and set(inv[0]['stages'])=={'mentioned','verified_read'}
+ run=s.list('runs')[0];assert run['session_id']=='parent'
+ assert not run.get('parent_session_id') and not run.get('agent_id')
+ restarted=Store(s.root)
+ assert observe_session(restarted,p,'parent','codex-cli')['new_events']==0
+ ingest(restarted);assert len(restarted.list('capability_invocations'))==1
+ (skill/'SKILL.md').write_text(text+'Changed.\n')
+ append(p,{'turn_id':'next'},'turn_context')
+ append(p,{'type':'custom_tool_call','call_id':'next','name':'exec','input':'cat '+str(skill/'SKILL.md')},'response_item')
+ append(p,{'type':'custom_tool_call_output','call_id':'next','output':text},'response_item')
+ observe_session(restarted,p,'parent','codex-cli');ingest(restarted)
+ later=[x for x in restarted.list('capability_invocations') if x['turn_id']=='next']
+ assert len(later)==1 and 'verified_read' not in later[0]['stages']
 
 
 @pytest.mark.parametrize('child',[False,True])
