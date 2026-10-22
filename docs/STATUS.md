@@ -1,3 +1,30 @@
+# Daily selected-review scope revocation repair — 2026-10-22
+
+Independent read-only review reproduced a scope-revocation gap: selecting an
+item from a pending daily batch returned a transient selected view, but its
+finish path did not retain the diagnostic requirement. Both observation and
+diagnostic scope revocation could therefore leave that item's receipt accepted.
+The shared batch now persists the selected item IDs and rechecks both scopes
+before accepting their receipts, including after restart. Other daily items
+retain their existing metadata-only accounting path.
+
+The original regressions failed before the fix. Coverage checks whole-receipt
+rollback, accumulated selections, authorization restoration, unchanged manifest
+and unrelated work, idempotent selection/redelivery and source-drift behavior.
+Applicable backend, distribution, isolated installation and final Git/CI evidence
+are checked at delivery. The existing immutable service was not upgraded; no
+global Skill, scope grant, oracle or installation authority was changed.
+
+The daily review processed 24 conversation obligations across 23 sessions:
+17 body reads covered 16 distinct sessions, seven exact sources were unavailable,
+and one oversized record remains a hashed gap. Changed sources retain immediate
+follow-up; full-window and natural-task coverage remain unknown. One new selected
+factual capsule bound a delegated task contract, observed Skill version and exact
+tool records. The original background reviewer completed with HOLD and recorded
+usage; environment, independent outcome truth and monetary cost remain unknown.
+This is reviewed input and a worklist repair, not independent Skill improvement.
+Skill gain remains HOLD, natural gain UNKNOWN and method RSI UNVERIFIED.
+
 # Exact stable CLI transcript ingress — 2026-10-21
 
 The scoped daily review resumed the previous batch and reviewed a second batch:

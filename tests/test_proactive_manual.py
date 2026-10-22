@@ -69,6 +69,52 @@ def test_selection_of_daily_pending_item_shares_its_receipt_without_discarding_o
     assert s.get('proactive_review_batches', 'active')['items'] == daily['items']
 
 
+@pytest.mark.parametrize('revoked,reason', [
+    ('diagnostic_scopes', 'RETRO_DIAGNOSTIC_SCOPE_REQUIRED'),
+    ('scopes', 'OUTSIDE_SCOPE'),
+])
+def test_daily_selection_scope_revocation_survives_restart_and_rolls_back_receipt(tmp_path, revoked, reason):
+    s, scope, index = setup(tmp_path)
+    source(scope, index, 'same'); source(scope, index, 'other')
+    daily = plan(s, index, stamp=STAMP)
+    selected = plan_selected(s, index, 'same', stamp=STAMP)
+    plan_selected(s, index, 'other', stamp=STAMP)
+    complete = receipt(s, daily, 'repaired')
+    s.settings({revoked: []})
+    s = Store(s.root)
+    before = s.get('proactive_review_batches', 'active')
+    with pytest.raises(ValueError, match=reason):
+        finish(s, daily['batch_id'], complete, stamp=STAMP)
+    assert s.get('proactive_review_batches', 'active') == before
+    assert not s.list('proactive_review_items')
+    assert not s.list('proactive_review_cycles')
+
+    s.settings({revoked: [str(scope)]})
+    repeated = plan_selected(s, index, 'same', stamp=STAMP)
+    assert repeated['batch_id'] == selected['batch_id']
+    assert s.get('proactive_review_batches', 'active') == before
+    result = finish(s, selected['batch_id'], receipt(s, selected), stamp=STAMP)
+    assert result['remaining'] == 2
+    assert finish(Store(s.root), selected['batch_id'], receipt(s, selected), stamp=STAMP) == result
+    after = s.get('proactive_review_batches', 'active')
+    assert after['items'] == daily['items'] and after['manifest_sha256'] == daily['manifest_sha256']
+    assert list(after['results']) == [selected['items'][0]['id']]
+
+
+def test_daily_diagnostic_requirement_only_applies_to_selected_item(tmp_path):
+    s, scope, index = setup(tmp_path)
+    source(scope, index, 'selected'); source(scope, index, 'metadata-only')
+    daily = plan(s, index, stamp=STAMP)
+    selected = plan_selected(s, index, 'selected', stamp=STAMP)
+    s.settings({'diagnostic_scopes': []})
+    other = next(i for i in daily['items'] if i.get('session_id') == 'metadata-only')
+    metadata = receipt(s, {**daily, 'items': [other]}, 'hold')
+    result = finish(Store(s.root), daily['batch_id'], metadata, stamp=STAMP)
+    assert result['remaining'] == 2
+    assert s.get('proactive_review_items', selected['items'][0]['id']) is None
+    assert s.get('proactive_review_items', other['id'])['disposition'] == 'hold'
+
+
 @pytest.mark.parametrize('outside', [False, True])
 def test_both_scopes_checked_before_any_transcript_open(tmp_path, monkeypatch, outside):
     s, scope, index = setup(tmp_path, diagnostics=False)

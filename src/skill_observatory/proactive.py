@@ -325,6 +325,12 @@ def plan_selected(store, index_db, session_id, *, stamp=None):
                         and i['id'] not in daily.get('results', {})]
             if selected:
                 _diagnostic_scope(store, selected[0]['cwd'])
+                # The shared daily batch must retain this requirement across
+                # roots/restarts; the returned selected view is not persisted.
+                diagnostic_items = daily.get('diagnostic_item_ids', [])
+                if selected[0]['id'] not in diagnostic_items:
+                    daily = {**daily, 'diagnostic_item_ids': [*diagnostic_items, selected[0]['id']]}
+                    store.put('proactive_review_batches', daily, db)
                 return {**daily, 'items': selected, 'mode': 'selected_from_daily',
                         'total_batch_items': len(daily['items']),
                         'source_changed_since_plan': selected[0]['fingerprint'] != item['fingerprint'],
@@ -389,7 +395,7 @@ def finish(store, batch_id, receipt, *, stamp=None):
                     or result['disposition'] not in DISPOSITIONS:
                 raise ValueError('PROACTIVE_RESULT_INVALID')
             seen.add(result['id']); item = by_id[result['id']]
-            if batch.get('mode') == 'selected_session':
+            if batch.get('mode') == 'selected_session' or item['id'] in batch.get('diagnostic_item_ids', []):
                 _diagnostic_scope(store, item['cwd'])
             if item['fingerprint'] != result['fingerprint']:
                 raise ValueError('PROACTIVE_SOURCE_MISMATCH')
