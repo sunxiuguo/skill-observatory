@@ -202,6 +202,43 @@ def test_own_descendants_excluded_and_index_type_drift_refused(tmp_path):
     with pytest.raises(ValueError, match='INDEX_TIME_UNVERIFIED'): plan(s, index, stamp=STAMP+1)
 
 
+def test_unknown_version_child_excluded_without_admitting_adapter(tmp_path):
+    s, scope, index = setup(tmp_path)
+    child = chat(scope, index, 'own-worker', child=True, version='99.0')
+    other = chat(scope, index, 'other-worker', child=True, version='99.0')
+    meta = json.loads(other.read_text())
+    meta['payload']['session_id'] = 'other-root'
+    meta['payload']['source']['subagent']['thread_spawn']['parent_thread_id'] = 'other-root'
+    other.write_text(json.dumps(meta) + '\n')
+    batch = plan(s, index, exclude_session='parent', stamp=STAMP)
+    chats = [i for i in batch['items'] if i['kind'] == 'chat']
+    assert [i['session_id'] for i in chats] == ['other-worker']
+    assert batch['internal_skipped'] == 1
+    assert chats[0]['signal']['reason_code'] == 'TRANSCRIPT_VERSION_UNVERIFIED'
+    assert 'adapter_version' not in chats[0]['signal']
+    with pytest.raises(ValueError, match='TRANSCRIPT_VERSION_UNVERIFIED'):
+        observe_session(s, child, 'own-worker', 'codex-subagent')
+    assert s.list('runs') == []
+
+
+@pytest.mark.parametrize('fault', ['envelope', 'id', 'cwd', 'originator', 'thread_source', 'parent', 'logical'])
+def test_unverified_child_identity_fault_stays_visible(tmp_path, fault):
+    s, scope, index = setup(tmp_path)
+    path = chat(scope, index, 'worker', child=True, version='99.0')
+    envelope = json.loads(path.read_text()); meta = envelope['payload']
+    if fault == 'envelope': envelope['type'] = 'response_item'
+    elif fault == 'id': meta['id'] = 'different'
+    elif fault == 'cwd': meta['cwd'] = str(tmp_path / 'outside')
+    elif fault == 'originator': meta['originator'] = 'unverified'
+    elif fault == 'thread_source': meta['thread_source'] = 'interactive'
+    elif fault == 'parent': meta['source']['subagent']['thread_spawn']['parent_thread_id'] = ''
+    else: meta['session_id'] = ''
+    path.write_text(json.dumps(envelope) + '\n')
+    batch = plan(s, index, exclude_session='parent', stamp=STAMP)
+    assert [i['session_id'] for i in batch['items'] if i['kind'] == 'chat'] == ['worker']
+    assert batch['internal_skipped'] == 0
+
+
 def test_finish_source_drift_is_immediate_followup_never_current_repair(tmp_path):
     s, scope, index = setup(tmp_path); p = chat(scope, index, 'one')
     b = plan(s, index, stamp=STAMP)

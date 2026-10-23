@@ -1,3 +1,40 @@
+# Review isolation, current App ingress and worker recovery — 2026-10-23
+
+A real daily worklist selected its own child when an unverified transcript
+version prevented normal identity extraction. The planner now uses strictly
+index-matched child metadata solely to exclude the current root's descendants.
+This hint does not admit transcript bodies or certify lineage for outcomes;
+unrelated unknown versions and malformed identities remain visible gaps.
+
+Two current Desktop transcripts were checked before admitting the exact
+`0.163.0-alpha.11.1` App and native-child shapes through the existing adapter.
+CLI substitutions, identity mismatch, missing child parents and future versions
+remain refused. Both real sources drained to EOF in isolated ledgers, producing
+10 and 30 events; restart reads produced no new events.
+
+The original planner/parser regressions fail against the prior source. Current
+validation passes 376 backend tests with required Docker execution, nine actual
+API/DOM tests and 77 focused tests against a clean installed wheel outside the
+checkout. All 34 installed package files match the wheel. Contract and archive
+checks pass; final source/remote/CI identity is checked at delivery.
+
+All three background lanes had stopped progressing for over 21 hours while the
+HTTP service still responded. After preserving a verified private ledger/config
+backup and confirming no nonterminal jobs or pending installations, the original
+service lifecycle restarted the same immutable installation. All lanes resumed
+and the 12,954-item spool drained to zero. The original stall's cause remains
+unknown; this recovery is not a runtime upgrade or proof against recurrence.
+
+Two batches accounted for 24 selected conversation obligations, including one
+metadata-only acknowledgement of the incorrectly selected current child.
+Sixteen other sessions had bounded body reads; five missing exact sources, two
+unverified source shapes and oversized records retain coverage gaps. Changed
+sources remain due for follow-up; more sources remain. An external review child
+produced no effective tool result and was closed unused, with its attempt cost
+retained. No independent review credit or new global Skill change is claimed.
+Factual-input, independent-truth and natural-sample gaps remain: Skill gain HOLD,
+natural gain UNKNOWN and method RSI UNVERIFIED.
+
 # Daily selected-review scope revocation repair — 2026-10-22
 
 Independent read-only review reproduced a scope-revocation gap: selecting an

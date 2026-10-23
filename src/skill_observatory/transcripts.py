@@ -13,7 +13,8 @@ from .store import canonical, digest, now
 DESKTOP_APP_ORIGINATOR = "Codex Desktop"
 ALPHA_17 = "0.162.0-alpha.17.2"
 ALPHA_10_APP = "0.163.0-alpha.10.2"
-VERIFIED_APP_VERSIONS = {ALPHA_17, ALPHA_10_APP}
+ALPHA_11_APP = "0.163.0-alpha.11.1"
+VERIFIED_APP_VERSIONS = {ALPHA_17, ALPHA_10_APP, ALPHA_11_APP}
 VERIFIED_EXEC_VERSIONS = {"0.162.1", "0.163.0"}
 CHILD_TERMINAL_EVENTS = {"SubagentStart", "SubagentStop"}
 
@@ -73,7 +74,7 @@ def _read_meta(store, path, source):
         spawned = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
         # This newer artifact was observed in Desktop and its native children.
         # Its standalone CLI shape has not been verified by those observations.
-        if version == ALPHA_10_APP and (not desktop or source == 'codex-cli'
+        if version in {ALPHA_10_APP, ALPHA_11_APP} and (not desktop or source == 'codex-cli'
                 or (source == 'codex-desktop' and meta.get('source') != 'vscode')):
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
         if (source == 'codex-cli' and not (cli and meta.get('source') == 'exec')) \

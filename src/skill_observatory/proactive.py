@@ -95,10 +95,33 @@ def audit(store, stamp):
             'claim': 'signals_only_not_skill_or_method_gain'}
 
 
+def _exclusion_lineage(envelope, row):
+    """Metadata hints may suppress this root's work, never admit body parsing."""
+    meta = envelope.get('payload', {})
+    if envelope.get('type') != 'session_meta' or not isinstance(meta, dict):
+        return None
+    source = meta.get('source')
+    subagent = source.get('subagent') if isinstance(source, dict) else None
+    spawn = subagent.get('thread_spawn') if isinstance(subagent, dict) else None
+    if not isinstance(spawn, dict):
+        return None
+    logical, parent = meta.get('session_id'), spawn.get('parent_thread_id')
+    if (meta.get('id') != row['id'] or meta.get('thread_source') != 'subagent'
+            or meta.get('originator') not in {'Codex Desktop', 'codex_exec'}
+            or not isinstance(meta.get('cwd'), str) or not meta['cwd']
+            or Path(meta['cwd']).resolve() != Path(row['cwd']).resolve()
+            or not all(isinstance(s, str) and 0 < len(s) <= 128 for s in (logical, parent))
+            or row['id'] in {logical, parent}):
+        return None
+    return {'logical_session_id': logical, 'parent_session_id': parent,
+            'basis': 'index_matched_metadata_only'}
+
+
 def _source(row, store, index_parent=None):
     """Read metadata only after scope filtering. Unrecognized shapes remain visible."""
     path = Path(row['rollout_path'])
     signal = {'path': str(path)}
+    exclusion_lineage = None
     try:
         from .transcripts import archive_path
         resolved = archive_path(path, index_parent)
@@ -117,6 +140,7 @@ def _source(row, store, index_parent=None):
             raise ValueError('TRANSCRIPT_META_INVALID')
         meta = envelope['payload']
         signal['meta_sha256'] = digest(first)
+        exclusion_lineage = _exclusion_lineage(envelope, row)
         child = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
         source = 'codex-subagent' if child else ('codex-desktop' if meta.get('originator') == 'Codex Desktop' else 'codex-cli')
         identity = _identity(store, path, source, expected_session_id=row['id'])
@@ -130,6 +154,8 @@ def _source(row, store, index_parent=None):
         # Do not put arbitrary exception text or transcript contents in a worklist.
         signal['reason_code'] = str(ex) if isinstance(ex, ValueError) \
             and str(ex).replace('_', '').isalnum() else type(ex).__name__
+        if exclusion_lineage:
+            signal['exclusion_lineage'] = exclusion_lineage
     return {'id': 'chat_' + digest(row['id'].encode())[:24], 'kind': 'chat',
             'session_id': row['id'], 'cwd': row['cwd'], 'updated_at': row['updated_at'],
             'evidence_class': 'child_execution' if signal.get('source') == 'codex-subagent' else 'unclassified_execution',
@@ -241,7 +267,10 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
             visited.add(sid)
             item = row if row.get('kind') == 'chat' else _source(row, store, index_db.resolve().parent)
             scanned += 1
-            if exclude_session and item['signal'].get('root_session_id') == exclude_session:
+            lineage = item['signal'].get('exclusion_lineage', {})
+            if exclude_session and exclude_session in (
+                    item['signal'].get('root_session_id'),
+                    lineage.get('logical_session_id'), lineage.get('parent_session_id')):
                 skipped_internal += 1
                 continue
             previous = store.get('proactive_review_items', item['id'], db) or {}

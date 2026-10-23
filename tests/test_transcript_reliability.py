@@ -89,15 +89,20 @@ def test_stable_163_exec_exact_read_restart_and_identity_refusal(tmp_path):
 
 
 @pytest.mark.parametrize('child',[False,True])
-def test_exact_163_desktop_and_native_child_shape_with_future_and_cli_refusals(tmp_path,child):
- s,p,m=setup(tmp_path,'0.163.0-alpha.10.2',child=child)
+@pytest.mark.parametrize('version',['0.163.0-alpha.10.2','0.163.0-alpha.11.1'])
+def test_exact_163_desktop_and_native_child_shape_with_future_and_cli_refusals(tmp_path,child,version):
+ s,p,m=setup(tmp_path,version,child=child)
  source='codex-subagent' if child else 'codex-desktop';sid='child' if child else 'parent'
  append(p,{'type':'task_complete','turn_id':'t'})
+ with pytest.raises(ValueError,match='SESSION_ID_MISMATCH'):
+  observe_session(s,p,'unrelated',source)
+ assert s.list('cursors')==[] and not list((s.root/'spool').glob('*.json'))
  result=observe_session(s,p,sid,source)
  assert result['new_events']==1 and result['execution_session_id']==sid
  assert result['parent_session_id']==('parent' if child else None)
  for patch,wrong_source,reason in [
   ({'cli_version':'0.163.0-alpha.10.3'},source,'VERSION_UNVERIFIED'),
+  ({'cli_version':'0.163.0-alpha.11.2'},source,'VERSION_UNVERIFIED'),
   ({'originator':'codex_exec','source':'exec'},'codex-cli','SOURCE_SCHEMA_UNVERIFIED'),
   ({'session_id':None},source,'SCHEMA_UNVERIFIED')]:
   p.write_text(json.dumps({'type':'session_meta','payload':{**m,**patch}})+'\n')
@@ -108,8 +113,9 @@ def test_exact_163_desktop_and_native_child_shape_with_future_and_cli_refusals(t
   with pytest.raises(ValueError,match='SOURCE_SCHEMA_UNVERIFIED'):observe_session(s,p,sid,source)
 
 
-def test_child_hook_transcript_read_is_one_logical_invocation(tmp_path):
- s,p,m=setup(tmp_path,child=True)
+@pytest.mark.parametrize('version',['0.162.0-alpha.17.2','0.163.0-alpha.11.1'])
+def test_child_hook_transcript_read_is_one_logical_invocation(tmp_path,version):
+ s,p,m=setup(tmp_path,version=version,child=True)
  skill=tmp_path/'flow';skill.mkdir();text='---\nname: flow\ndescription: flow\n---\nActual bytes.\n';(skill/'SKILL.md').write_text(text);register(s,skill,'owner')
  track_hook_session(s,dict(event='SubagentStart',session_id='parent',agent_id='child',turn_id='t',transcript_path=str(p)))
  append(p,{'type':'function_call','call_id':'call','name':'exec_command','arguments':'cat '+str(skill/'SKILL.md')},'response_item')
