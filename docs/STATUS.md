@@ -1,3 +1,46 @@
+# Recurring worker recovery and bounded review — 2026-10-24
+
+All three background lanes again stopped progressing while the HTTP process
+remained responsive. Independent health receipts were over 15 hours stale and
+the spool held over 6,000 deliveries. A native process sample showed the event
+loop and idle executor threads; the ledger passed its integrity check, with no
+nonterminal jobs or pending installations. These observations do not establish
+the original failure cause.
+
+After preserving a hash-verified, losslessly compressed database backup and
+configuration evidence, the original service lifecycle restarted the same
+immutable installation. All three lanes resumed and the spool drained to zero.
+The service entry, configuration and loaded build remain unchanged. This is
+recovery evidence, not a runtime upgrade or proof against another recurrence.
+
+Two isolated lifespan regressions reproduced a separate reliability defect:
+when both normal progress and failure-report writes raise, the worker task exits;
+a malformed watchdog receipt can also end checks for all subsequent lanes.
+Failure reporting now retains a typed log and bounded backoff, and watchdog
+errors remain isolated to their lane. Cancellation still stops the tasks and
+no callback is cancelled or replayed by the watchdog. Both cases fail on the
+prior source and pass after the repair; focused recovery checks pass. This
+mechanism is not established as the cause of the observed production stall.
+The existing immutable background runtime has not received this source repair.
+An external review attempt was closed without a final deliverable; the root
+performed reproduction and acceptance, with all attempt costs retained.
+
+Two persisted batches accounted for 24 conversation obligations. Sixteen
+sources received bounded body/tool review; six exact sources were unavailable
+and two sources had incompatible identity or format. Three sources had changed
+relative to their frozen worklist and retain immediate follow-up. Missing sources,
+incomplete external reviews, interrupted work and domain data blockers retain
+follow-up with their original owners. More sources remain; full-window and natural-task denominators are
+unknown. The previous real scheduled run was archived by the native scheduler;
+this run's post-completion archive cannot yet be verified.
+
+The factual chain still has six capsules and 28 completed reviews, with no
+candidate, experiment or installation. Previously blocked factual inputs retain
+their exact source fingerprints and missing goals or observed versions; no
+unchanged review was redispatched. No global Skill or cross-project owner was
+modified. Skill gain remains HOLD, natural gain UNKNOWN and method RSI
+UNVERIFIED. Applicable checks and final Git/CI identity are recorded at delivery.
+
 # Review isolation, current App ingress and worker recovery — 2026-10-23
 
 A real daily worklist selected its own child when an unverified transcript

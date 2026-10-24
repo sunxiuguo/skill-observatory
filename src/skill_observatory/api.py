@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 import json
+import logging
 from pathlib import Path
 import secrets
 import sqlite3
@@ -86,8 +87,17 @@ def create_app(store=None, web_root=None, daemon=True, reviewer=None,pipeline=No
             from .maintenance import automatic_maintenance
             automatic_maintenance(store);store._maintenance_checked_at=time.time()
         return result
-    async def worker(lane,callback,phase):
+    def report_failure(lane,reason):
         from .health import failure
+        try:return failure(store,lane,reason)
+        except Exception as error:
+            # Diagnostic I/O must not terminate a lane. Keep raw exception data
+            # private and back off; this never cancels or restarts a callback.
+            logging.getLogger(__name__).error(
+                'WORKER_FAILURE_RECEIPT_UNAVAILABLE lane=%s reason=%s error_type=%s',
+                lane,reason,type(error).__name__)
+            return 60
+    async def worker(lane,callback,phase):
         while True:
             delay=1
             try:
@@ -96,23 +106,26 @@ def create_app(store=None, web_root=None, daemon=True, reviewer=None,pipeline=No
                 await asyncio.to_thread(callback)
                 progress(store,lane,'idle',successful=True,deadline_at=None)
             except Exception as e:
-                delay=failure(store,lane,type(e).__name__)
+                delay=report_failure(lane,type(e).__name__)
             await asyncio.sleep(delay)
     async def watch():
-        from .health import read_lane,failure
+        from .health import read_lane
         while True:
+            delay=2
             for lane in ('review_worker','evolution_worker'):
-                row=read_lane(store.root,lane)
-                bound=getattr(reviewer,'max_seconds',120)+50 if lane=='review_worker' else 300
-                if row.get('status')!='failed' and row.get('phase')!='idle' and time.time()-row.get('phase_started_at',time.time())>bound:
-                    failure(store,lane,'WORKER_DEADLINE_READBACK_REQUIRED')
-            await asyncio.sleep(2)
+                try:
+                    row=read_lane(store.root,lane)
+                    bound=getattr(reviewer,'max_seconds',120)+50 if lane=='review_worker' else 300
+                    if row.get('status')!='failed' and row.get('phase')!='idle' and time.time()-row.get('phase_started_at',time.time())>bound:
+                        delay=max(delay,report_failure(lane,'WORKER_DEADLINE_READBACK_REQUIRED'))
+                except Exception as error:
+                    delay=max(delay,report_failure(lane,type(error).__name__))
+            await asyncio.sleep(delay)
     @asynccontextmanager
     async def lifespan(app):
         try:recover(store)
         except sqlite3.DatabaseError:
-            from .health import failure
-            failure(store,'daemon','LEDGER_INTEGRITY_RECOVERY_REQUIRED')
+            report_failure('daemon','LEDGER_INTEGRITY_RECOVERY_REQUIRED')
         tasks=[asyncio.create_task(worker('daemon',lambda:collect(store),'collect')),
                asyncio.create_task(worker('review_worker',lambda:process_one(store,reviewer),'review')),
                asyncio.create_task(worker('evolution_worker',evolution_tick,'evolution')),
