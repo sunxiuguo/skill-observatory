@@ -88,6 +88,37 @@ def test_stable_163_exec_exact_read_restart_and_identity_refusal(tmp_path):
  assert len(later)==1 and 'verified_read' not in later[0]['stages']
 
 
+def test_164_desktop_observation_restart_and_unverified_surfaces(tmp_path):
+ s,p,m=setup(tmp_path,'0.164.0-alpha.11.1');m['thread_source']='automation'
+ p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
+ append(p,{'turn_id':'t'},'turn_context')
+ append(p,{'type':'task_started','turn_id':'t'})
+ append(p,{'type':'custom_tool_call','call_id':'call','name':'exec','input':'true'},'response_item')
+ append(p,{'type':'custom_tool_call_output','call_id':'call','output':'exit_code: 0'},'response_item')
+ append(p,{'type':'task_complete','turn_id':'t'})
+ with pytest.raises(ValueError,match='SESSION_ID_MISMATCH'):
+  observe_session(s,p,'unrelated','codex-desktop')
+ assert not s.list('cursors') and not list((s.root/'spool').glob('*.json'))
+ result=observe_session(s,p,'parent','codex-desktop');ingest(s)
+ assert result['new_events']==4 and result['execution_session_id']=='parent'
+ assert not result['parent_session_id'] and not result['agent_id']
+ from skill_observatory.proactive import _source
+ selected=_source({'id':'parent','cwd':str(tmp_path),'rollout_path':str(p),'updated_at':1},s)
+ assert selected['signal']['adapter_version']=='0.164.0-alpha.11.1'
+ assert selected['signal']['source']=='codex-desktop' and 'reason_code' not in selected['signal']
+ restarted=Store(s.root)
+ assert observe_session(restarted,p,'parent','codex-desktop')['new_events']==0
+ ingest(restarted);assert len(restarted.list('runs'))==1
+ for patch,source,reason in [
+  ({'cli_version':'0.164.0-alpha.11.2'},'codex-desktop','VERSION_UNVERIFIED'),
+  ({'source':'exec','originator':'codex_exec'},'codex-cli','SOURCE_SCHEMA_UNVERIFIED'),
+  ({'source':'cli'},'codex-desktop','SOURCE_SCHEMA_UNVERIFIED'),
+  ({'thread_source':'subagent','source':{'subagent':{'thread_spawn':{'parent_thread_id':'parent','depth':1}}}},'codex-subagent','SOURCE_SCHEMA_UNVERIFIED'),
+  ({'session_id':None},'codex-desktop','SCHEMA_UNVERIFIED')]:
+  p.write_text(json.dumps({'type':'session_meta','payload':{**m,**patch}})+'\n')
+  with pytest.raises(ValueError,match=reason):observe_session(restarted,p,'parent',source)
+
+
 @pytest.mark.parametrize('child',[False,True])
 @pytest.mark.parametrize('version',['0.163.0-alpha.10.2','0.163.0-alpha.11.1'])
 def test_exact_163_desktop_and_native_child_shape_with_future_and_cli_refusals(tmp_path,child,version):

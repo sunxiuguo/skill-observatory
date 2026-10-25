@@ -71,8 +71,11 @@ uv run skillobs observe-session /absolute/selected-session.jsonl \
 ```
 
 The versioned transcript adapter supports certified 0.160.0/0.160.1 and
-0.162.0-alpha.2 fixtures, plus the exact 0.162.0-alpha.17.2 and 0.163.0-alpha.10.2 Desktop/subagent
-metadata shapes, and the exact 0.162.1/0.163.0 standalone CLI exec shape. Unknown
+0.162.0-alpha.2 fixtures, plus the exact 0.162.0-alpha.17.2,
+0.163.0-alpha.10.2 and 0.163.0-alpha.11.1 Desktop/subagent metadata shapes,
+the exact 0.164.0-alpha.11.1 Desktop shape, and the exact 0.162.1/0.163.0
+standalone CLI exec shape. The 0.164 App's CLI and child shapes remain
+unverified and refused. Unknown
 versions or incompatible source/schema combinations stay HOLD. It
 checks session/scope/cursor identity, and uses the same runtime/spool.
 Exact Skill bytes observed in native tool output can support `verified_read`;

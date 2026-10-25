@@ -1,3 +1,37 @@
+# Current Desktop ingress and bounded review — 2026-10-25
+
+Two actual archived Desktop transcripts established the exact
+`0.164.0-alpha.11.1` source shape. The adapter previously refused that version;
+it now accepts only its verified Desktop surface. Its CLI and child surfaces,
+future versions, incompatible origins and mismatched identities remain refused.
+Both real sources drained to EOF in isolated ledgers, each producing 22 events;
+reopening each ledger produced no duplicate events. The regression fails on the
+prior adapter. This is source-format and recovery evidence, not Skill gain.
+
+Validation passes 61 focused tests, 379 backend tests with required Docker
+execution, nine actual API/DOM tests, the project contract and distribution audit.
+The clean installed-wheel check verifies package bytes, the actual CLI and the
+affected tests outside the source checkout. Final source/remote/CI identity is
+checked at delivery.
+
+Two batches accounted for 24 conversation obligations: 17 sources received
+bounded body/tool review, five exact sources were unavailable and two sources
+retained incompatible format or identity. Frozen sources that changed retain
+immediate follow-up. Interrupted reviews, domain input failures and repeated
+automation-memory path failures retain their original owners; tool failures
+alone do not establish a Skill defect. More sources remain and the full-window
+and natural-task denominators are unknown.
+
+All three background lanes were progressing and no recovery restart was needed.
+The existing immutable installation has not been upgraded to this source.
+The previous scheduled run's archive was verified; the current run's archive
+can only be checked after completion. The factual chain still lacks independently
+accepted candidate, experiment and installation evidence. An exact available
+historical source was rechecked for missing task-goal facts; repository guidance
+and tool actions cannot substitute for its absent original request. No unchanged
+semantic review was redispatched. Skill gain remains HOLD, natural gain UNKNOWN
+and method RSI UNVERIFIED.
+
 # Recurring worker recovery and bounded review — 2026-10-24
 
 All three background lanes again stopped progressing while the HTTP process

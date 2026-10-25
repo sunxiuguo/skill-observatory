@@ -15,6 +15,7 @@ ALPHA_17 = "0.162.0-alpha.17.2"
 ALPHA_10_APP = "0.163.0-alpha.10.2"
 ALPHA_11_APP = "0.163.0-alpha.11.1"
 VERIFIED_APP_VERSIONS = {ALPHA_17, ALPHA_10_APP, ALPHA_11_APP}
+VERIFIED_DESKTOP_ONLY_VERSIONS = {"0.164.0-alpha.11.1"}
 VERIFIED_EXEC_VERSIONS = {"0.162.1", "0.163.0"}
 CHILD_TERMINAL_EVENTS = {"SubagentStart", "SubagentStop"}
 
@@ -66,12 +67,16 @@ def _read_meta(store, path, source):
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
         if not isinstance(meta.get('session_id'), str) or meta.get('session_id') != meta.get('id'):
             raise ValueError('TRANSCRIPT_SCHEMA_UNVERIFIED')
-    elif version in VERIFIED_APP_VERSIONS:
+    elif version in VERIFIED_APP_VERSIONS | VERIFIED_DESKTOP_ONLY_VERSIONS:
         # The version string alone is not a contract. Current App transcripts
         # carry both the rollout/execution id and the logical parent session.
         desktop = meta.get('originator') == DESKTOP_APP_ORIGINATOR
         cli = meta.get('originator') == 'codex_exec'
         spawned = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
+        # Desktop evidence does not certify the same binary's CLI or children.
+        if version in VERIFIED_DESKTOP_ONLY_VERSIONS and (
+                source != 'codex-desktop' or not desktop or meta.get('source') != 'vscode'):
+            raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
         # This newer artifact was observed in Desktop and its native children.
         # Its standalone CLI shape has not been verified by those observations.
         if version in {ALPHA_10_APP, ALPHA_11_APP} and (not desktop or source == 'codex-cli'
