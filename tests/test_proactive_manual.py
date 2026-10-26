@@ -149,6 +149,11 @@ def test_unselected_daily_receipt_rechecks_observation_scope_after_restart(tmp_p
     after = s.get('proactive_review_batches', 'active')
     assert after['items'] == daily['items'] and after['manifest_sha256'] == daily['manifest_sha256']
     assert after['results'][allowed['id']] == other_receipt['results'][0]
+    s.settings({'scopes': [str(other_scope)]})
+    with pytest.raises(ValueError, match='OUTSIDE_SCOPE'):
+        finish(Store(s.root), daily['batch_id'], restored, stamp=STAMP+1)
+    assert s.get('proactive_review_batches', 'active') == after
+    assert s.get('proactive_review_items', revoked['id'])['disposition'] == 'repaired'
 
 
 @pytest.mark.parametrize('outside', [False, True])

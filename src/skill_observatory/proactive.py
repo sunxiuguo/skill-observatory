@@ -391,8 +391,9 @@ def plan_selected(store, index_db, session_id, *, stamp=None):
 def finish(store, batch_id, receipt, *, stamp=None):
     """Root accounting only; cannot install, accept domain truth or clear HOLDs.
 
-    Incomplete items remain pending. Same-receipt redelivery is idempotent;
-    conflicts and evidence not in this content-addressed store are refused.
+    Incomplete items remain pending. Same-receipt redelivery is idempotent
+    while current scope checks authorize it; conflicts and evidence not in
+    this content-addressed store are refused.
     """
     stamp = time.time() if stamp is None else stamp
     if not isinstance(receipt, dict) or set(receipt) != {'schema_version', 'root_session_id', 'results'} \
