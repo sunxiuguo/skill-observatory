@@ -1,3 +1,43 @@
+# Current CLI ingress and background qualification — 2026-10-26
+
+Two authorized sources established the exact `0.164.0` standalone CLI exec
+shape. The existing adapter now admits that version through its strict CLI,
+origin and matching session/execution identity gates. Desktop, child, mismatched
+identity and future-version refusals remain. The existing regressions fail on
+the prior source. Both actual sources drained to their captured EOF in isolated
+ledgers and produced no duplicate events after restart; one original task was
+still active, so this does not establish its completion or outcome.
+
+Validation passes 80 focused tests, 381 backend tests with required Docker
+execution, nine actual API/DOM tests and 80 tests against the clean installed
+wheel outside the checkout. All 34 installed package files match. Contract,
+distribution and final source/remote/CI identity are checked at delivery.
+The existing immutable background installation has not been upgraded.
+
+Two batches accounted for 24 conversation obligations. Fourteen sources received
+bounded body/tool review; eight exact sources were unavailable and two retained
+incompatible source or index identity. Changed frozen sources retain immediate
+follow-up. Historical hourly-gate timeouts, interrupted delegated reviews and
+Provider recovery tasks retain their original owners. More sources remain;
+the full-window and natural-task denominators are unknown.
+
+All three background lanes were progressing and the ledger integrity check
+passed. Their health does not establish semantic review readiness: the existing
+reviewer's transport/schema proofs bind an older Codex binary. One isolated
+renewal through that unchanged owner failed on its first synthetic turn, with
+two observed HTTP 401 exchanges and unknown usage/cost. Later qualification
+steps did not run; the failed turn was not replayed, no proofs were published
+and production configuration remained unchanged. Current authenticated transport
+and exact-runtime schema proof are required from the original Provider owner.
+Quota health does not establish execution authentication.
+
+The four exposed factual-input fingerprints are unchanged, with original goal
+or observed-version gaps retained; no unchanged semantic review was dispatched.
+The chain still has six factual capsules and 28 completed reviews, without a
+candidate, experiment or installation. Skill gain remains HOLD, natural gain
+UNKNOWN and method RSI UNVERIFIED. The previous scheduled run's archive was
+verified; this run's archive can only be checked after completion.
+
 # Current Desktop ingress and bounded review — 2026-10-25
 
 Two actual archived Desktop transcripts established the exact

@@ -40,7 +40,7 @@ def test_certified_cli_and_app_schema_and_source_controls(tmp_path,version,sourc
   with pytest.raises(ValueError,match='SCHEMA_UNVERIFIED'):observe_session(s,p,'parent',source)
 
 
-@pytest.mark.parametrize('version',['0.162.1','0.163.0'])
+@pytest.mark.parametrize('version',['0.162.1','0.163.0','0.164.0'])
 def test_stable_cli_exec_identity_and_unverified_source_refusal(tmp_path,version):
  s,p,m=setup(tmp_path,version);m.update(originator='codex_exec',source='exec')
  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
@@ -48,13 +48,14 @@ def test_stable_cli_exec_identity_and_unverified_source_refusal(tmp_path,version
  assert observe_session(s,p,'parent','codex-cli')['new_events']==1
  for source in ['codex-desktop','codex-subagent']:
   with pytest.raises(ValueError,match='SOURCE_SCHEMA_UNVERIFIED'):observe_session(s,p,'parent',source)
- for patch,reason in [({'source':'vscode'},'SOURCE_SCHEMA_UNVERIFIED'),({'originator':'Codex Desktop'},'SOURCE_SCHEMA_UNVERIFIED'),({'session_id':'other'},'SCHEMA_UNVERIFIED'),({'session_id':None},'SCHEMA_UNVERIFIED'),({'cli_version':'0.162.2'},'VERSION_UNVERIFIED'),({'cli_version':'0.163.1'},'VERSION_UNVERIFIED')]:
+ for patch,reason in [({'source':'vscode'},'SOURCE_SCHEMA_UNVERIFIED'),({'originator':'Codex Desktop'},'SOURCE_SCHEMA_UNVERIFIED'),({'session_id':'other'},'SCHEMA_UNVERIFIED'),({'session_id':None},'SCHEMA_UNVERIFIED'),({'cli_version':'0.162.2'},'VERSION_UNVERIFIED'),({'cli_version':'0.163.1'},'VERSION_UNVERIFIED'),({'cli_version':'0.164.1'},'VERSION_UNVERIFIED')]:
   p.write_text(json.dumps({'type':'session_meta','payload':{**m,**patch}})+'\n')
   with pytest.raises(ValueError,match=reason):observe_session(s,p,'parent','codex-cli')
 
 
-def test_stable_163_exec_exact_read_restart_and_identity_refusal(tmp_path):
- s,p,m=setup(tmp_path,'0.163.0');m.update(originator='codex_exec',source='exec',thread_source='automation')
+@pytest.mark.parametrize('version',['0.163.0','0.164.0'])
+def test_stable_exec_exact_read_restart_and_identity_refusal(tmp_path,version):
+ s,p,m=setup(tmp_path,version);m.update(originator='codex_exec',source='exec',thread_source='automation')
  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
  skill=tmp_path/'flow';skill.mkdir();text='---\nname: flow\ndescription: flow\n---\nExact instructions.\n'
  (skill/'SKILL.md').write_text(text);register(s,skill,'owner')
