@@ -115,6 +115,42 @@ def test_daily_diagnostic_requirement_only_applies_to_selected_item(tmp_path):
     assert s.get('proactive_review_items', other['id'])['disposition'] == 'hold'
 
 
+def test_unselected_daily_receipt_rechecks_observation_scope_after_restart(tmp_path, monkeypatch):
+    s, scope, index = setup(tmp_path)
+    other_scope = tmp_path / 'other'; other_scope.mkdir()
+    s.settings({'scopes': [str(scope), str(other_scope)]})
+    source(scope, index, 'revoked'); source(other_scope, index, 'allowed')
+    daily = plan(s, index, stamp=STAMP)
+    complete = receipt(s, daily, 'repaired')
+    revoked = next(i for i in daily['items'] if i.get('session_id') == 'revoked')
+    allowed = next(i for i in daily['items'] if i.get('session_id') == 'allowed')
+    s.settings({'scopes': [str(other_scope)], 'diagnostic_scopes': []})
+    s = Store(s.root)
+    before = s.get('proactive_review_batches', 'active')
+    # A resumed worklist retains its frozen obligations without rereading sources.
+    monkeypatch.setattr('skill_observatory.proactive._source',
+                        lambda *a, **k: pytest.fail('Pending resume opened a source'))
+    resumed = plan(s, index, stamp=STAMP+1)
+    assert resumed['resumed'] and resumed['items'] == daily['items']
+    with pytest.raises(ValueError, match='OUTSIDE_SCOPE'):
+        finish(s, daily['batch_id'], complete, stamp=STAMP+1)
+    assert s.get('proactive_review_batches', 'active') == before
+    assert not s.list('proactive_review_items') and not s.list('proactive_review_cycles')
+
+    # Another authorized daily item still permits metadata-only accounting.
+    other_receipt = receipt(s, {**daily, 'items': [allowed]}, 'hold')
+    assert finish(s, daily['batch_id'], other_receipt, stamp=STAMP+1)['remaining'] == 2
+    assert s.get('proactive_review_items', revoked['id']) is None
+    s.settings({'scopes': [str(scope), str(other_scope)]})
+    restored = receipt(s, {**daily, 'items': [revoked]}, 'repaired')
+    result = finish(Store(s.root), daily['batch_id'], restored, stamp=STAMP+1)
+    assert result['remaining'] == 1
+    assert finish(Store(s.root), daily['batch_id'], restored, stamp=STAMP+1) == result
+    after = s.get('proactive_review_batches', 'active')
+    assert after['items'] == daily['items'] and after['manifest_sha256'] == daily['manifest_sha256']
+    assert after['results'][allowed['id']] == other_receipt['results'][0]
+
+
 @pytest.mark.parametrize('outside', [False, True])
 def test_both_scopes_checked_before_any_transcript_open(tmp_path, monkeypatch, outside):
     s, scope, index = setup(tmp_path, diagnostics=False)

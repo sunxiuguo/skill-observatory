@@ -1,4 +1,12 @@
-# Current CLI ingress and background qualification — 2026-10-26
+# Daily receipt scope, current CLI ingress and qualification — 2026-10-26
+
+Independent source review reproduced a permission gap: an unselected daily chat
+could accept a repair receipt after its observation scope was revoked. Every
+chat receipt now rechecks current observation scope before source inspection or
+accounting. Pending manifests remain frozen; selected items additionally require
+diagnostic scope. The original reproducer and a public regression fail before
+the fix and pass after it. Coverage includes restart, whole-receipt rollback,
+unrelated authorized metadata-only work, scope restoration and idempotence.
 
 Two authorized sources established the exact `0.164.0` standalone CLI exec
 shape. The existing adapter now admits that version through its strict CLI,
@@ -8,9 +16,10 @@ the prior source. Both actual sources drained to their captured EOF in isolated
 ledgers and produced no duplicate events after restart; one original task was
 still active, so this does not establish its completion or outcome.
 
-Validation passes 80 focused tests, 381 backend tests with required Docker
-execution, nine actual API/DOM tests and 80 tests against the clean installed
-wheel outside the checkout. All 34 installed package files match. Contract,
+Validation passes 382 backend tests with required Docker execution, nine actual
+API/DOM tests and 100 tests against the clean installed wheel outside the
+checkout. All 34 installed package files match; the CLI and doctor also pass.
+Contract,
 distribution and final source/remote/CI identity are checked at delivery.
 The existing immutable background installation has not been upgraded.
 
@@ -32,9 +41,14 @@ and exact-runtime schema proof are required from the original Provider owner.
 Quota health does not establish execution authentication.
 
 The four exposed factual-input fingerprints are unchanged, with original goal
-or observed-version gaps retained; no unchanged semantic review was dispatched.
-The chain still has six factual capsules and 28 completed reviews, without a
-candidate, experiment or installation. Skill gain remains HOLD, natural gain
+or observed-version gaps retained. A bounded alternative source contained its
+original user request and observed historical Skill version. Its selected
+tool/terminal records were checked against event offsets and call/turn identities
+and bound through the existing factual builder. Legacy record-digest, environment,
+cost and natural-origin gaps remain explicit. The chain now has seven factual
+capsules and 28 completed reviews, without a candidate, experiment or installation.
+The renewed factual input remains subject to background qualification; no
+unchanged semantic review was dispatched. Skill gain remains HOLD, natural gain
 UNKNOWN and method RSI UNVERIFIED. The previous scheduled run's archive was
 verified; this run's archive can only be checked after completion.
 

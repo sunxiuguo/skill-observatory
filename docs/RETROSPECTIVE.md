@@ -15,6 +15,8 @@ skillobs --state PRIVATE_STATE retro-plan --index-db CODEX_INDEX --session-id SE
 
 若选定会话已经位于每日 pending 批次，返回该批次的选中项及 `total_batch_items`，完成收据只消费这一项，其他项继续 pending。当前来源与冻结计划有差异时，返回 `source_changed_since_plan`；重新读取当前事实，沿源漂移与复查门处理，不把单项复盘当成整批已审。
 
+pending 清单保留冻结义务，不重新读取来源。提交任何 chat 收据时都回查当前观测 scope；撤销后拒绝并回滚整份收据。选定项还需当前诊断 scope，普通每日项继续允许授权范围内的元数据记账。
+
 每日新计划跳过由 pending 手动批次持有的会话，并返回 `selected_pending_skipped`。历史重复工作单若已有较新审阅，旧收据继续拒绝覆盖；根检查最新审阅后，可在旧工作单的原 fingerprint 下明确采用最新 `evidence_sha256` 与 disposition。账本保存 `superseded_reviews` 指针及来源变化，原审阅、owner、证据和后续期限不重写。这只完成旧批次的记账，不把 follow_up/HOLD 改成修复或收益。
 
 根按当前 [审查流程](PROACTIVE_REVIEW.md) 和可用的经验 owner 进行复盘。证据在私有目录保留来源 session/turn、实际观察、最小 owner、原行为→拟改→原因→预期效果、验证和剩余缺口。通过 `artifact-import` 导入紧凑证据，再用现有 `proactive-finish --batch-id BATCH_ID --receipt PRIVATE_RECEIPT` 完成；收据格式、未来复查时间、冲突和源漂移检查保持相同。

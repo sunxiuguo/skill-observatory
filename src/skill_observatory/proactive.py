@@ -424,6 +424,8 @@ def finish(store, batch_id, receipt, *, stamp=None):
                     or result['disposition'] not in DISPOSITIONS:
                 raise ValueError('PROACTIVE_RESULT_INVALID')
             seen.add(result['id']); item = by_id[result['id']]
+            if item['kind'] == 'chat' and not _inside_scope(store, item['cwd']):
+                raise ValueError('OUTSIDE_SCOPE')
             if batch.get('mode') == 'selected_session' or item['id'] in batch.get('diagnostic_item_ids', []):
                 _diagnostic_scope(store, item['cwd'])
             if item['fingerprint'] != result['fingerprint']:
