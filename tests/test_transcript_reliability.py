@@ -40,7 +40,7 @@ def test_certified_cli_and_app_schema_and_source_controls(tmp_path,version,sourc
   with pytest.raises(ValueError,match='SCHEMA_UNVERIFIED'):observe_session(s,p,'parent',source)
 
 
-@pytest.mark.parametrize('version',['0.162.1','0.163.0','0.164.0'])
+@pytest.mark.parametrize('version',['0.162.1','0.163.0','0.164.0','0.164.0-alpha.11.1'])
 def test_stable_cli_exec_identity_and_unverified_source_refusal(tmp_path,version):
  s,p,m=setup(tmp_path,version);m.update(originator='codex_exec',source='exec')
  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
@@ -53,7 +53,7 @@ def test_stable_cli_exec_identity_and_unverified_source_refusal(tmp_path,version
   with pytest.raises(ValueError,match=reason):observe_session(s,p,'parent','codex-cli')
 
 
-@pytest.mark.parametrize('version',['0.163.0','0.164.0'])
+@pytest.mark.parametrize('version',['0.163.0','0.164.0','0.164.0-alpha.11.1'])
 def test_stable_exec_exact_read_restart_and_identity_refusal(tmp_path,version):
  s,p,m=setup(tmp_path,version);m.update(originator='codex_exec',source='exec',thread_source='automation')
  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
@@ -112,7 +112,6 @@ def test_164_desktop_observation_restart_and_unverified_surfaces(tmp_path):
  ingest(restarted);assert len(restarted.list('runs'))==1
  for patch,source,reason in [
   ({'cli_version':'0.164.0-alpha.11.2'},'codex-desktop','VERSION_UNVERIFIED'),
-  ({'source':'exec','originator':'codex_exec'},'codex-cli','SOURCE_SCHEMA_UNVERIFIED'),
   ({'source':'cli'},'codex-desktop','SOURCE_SCHEMA_UNVERIFIED'),
   ({'thread_source':'subagent','source':{'subagent':{'thread_spawn':{'parent_thread_id':'parent','depth':1}}}},'codex-subagent','SOURCE_SCHEMA_UNVERIFIED'),
   ({'session_id':None},'codex-desktop','SCHEMA_UNVERIFIED')]:

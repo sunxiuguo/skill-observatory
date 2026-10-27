@@ -7,6 +7,19 @@ from .store import canonical, digest, now
 CODE = re.compile(r'^[A-Za-z0-9_.:-]{1,120}$')
 
 
+def _current_scope(store, run):
+    from .capabilities import _scope
+    if not run.get('cwd'):raise ValueError('EVIDENCE_SOURCE_CWD_REQUIRED')
+    _scope(store, run['cwd'])
+
+
+def _observed_versions(store, run, db=None):
+    from .capabilities import verified_run_invocations
+    if db is None:
+        with store.connect() as db:return _observed_versions(store, run, db)
+    return sorted({u['version_id'] for u in verified_run_invocations(store, run, db)})
+
+
 def diagnostic_from_output(output):
     """Extract allowlisted failure types, never raw commands/output or prompts."""
     texts=[];codes=[]
@@ -41,6 +54,7 @@ def attach_evidence(store, value):
         raise ValueError('EVIDENCE_CAPSULE_CONTRACT_INVALID')
     run=store.get('runs',value['run_id'])
     if not run:raise ValueError('RUN_NOT_FOUND')
+    _current_scope(store,run)
     if versioned:
         outbound={k:v for k,v in value.items() if k!='local_refs'}
         if re.search(r'/Users/|/home/|/private/|[A-Z]:\\',canonical(outbound).decode()):raise ValueError('EVIDENCE_PRIVATE_PATH_REJECTED')
@@ -57,9 +71,7 @@ def attach_evidence(store, value):
     version=store.get('capability_versions',value['version_id'])
     cap=store.get('capability_catalog',version['capability_id']) if version else None
     if not cap or cap['owner']!=value['owner']:raise ValueError('EVIDENCE_OWNER_VERSION_MISMATCH')
-    if not any(u.get('version_id')==version['id'] and u.get('session_id')==run.get('execution_session_id',run.get('session_id'))
-               and u.get('turn_id')==run.get('turn_id') and 'verified_read' in u.get('stages',[])
-               for u in store.list('capability_invocations')):raise ValueError('EVIDENCE_VERSION_NOT_OBSERVED')
+    if version['id'] not in _observed_versions(store,run):raise ValueError('EVIDENCE_VERSION_NOT_OBSERVED')
     if not isinstance(value['result'],dict) or set(value['result'])-{'status','reason_code','exit_code'}:
         raise ValueError('EVIDENCE_RESULT_INVALID')
     if value['result'].get('status') not in {'completed','failed','interrupted','unknown'}:raise ValueError('EVIDENCE_RESULT_INVALID')
@@ -77,6 +89,8 @@ def attach_evidence(store, value):
         db.execute('BEGIN IMMEDIATE')
         current=store.get('runs',run['id'],db)
         if digest(canonical(current))!=manifest:raise ValueError('EVIDENCE_CAPSULE_RUN_DRIFT')
+        _current_scope(store,current)
+        if value['version_id'] not in _observed_versions(store,current,db):raise ValueError('EVIDENCE_VERSION_NOT_OBSERVED')
         from .capabilities import bind_run_attributions
         current=bind_run_attributions(store,current,db,version_id=value['version_id'])
         manifest=digest(canonical(current))
@@ -94,14 +108,21 @@ def attach_evidence(store, value):
 
 
 def build_capsule(store,run):
+    _current_scope(store,run)
     attached=store.get('run_evidence',run['id'])
     facts=None;missing=[]
     if attached:
-        if attached['run_manifest_sha256']!=digest(canonical(run)):
+        if (attached['run_manifest_sha256']!=digest(canonical(run))
+                or digest(canonical(store.get('runs',run['id'])))!=digest(canonical(run))):
             missing.append('EVIDENCE_CAPSULE_RUN_DRIFT')
         else:
             import json
             facts=json.loads(store.read_artifact(attached['capsule_sha256']))
+            try:
+                if facts['version_id'] not in _observed_versions(store,run):raise ValueError('EVIDENCE_VERSION_NOT_OBSERVED')
+                if facts.get('schema_version')==2:_validate_v2(store,run,facts)
+            except ValueError as error:
+                missing.append(str(error));facts=None
     if facts is None:missing.append('DIAGNOSTIC_FACTS_REQUIRED')
     # Metadata allows deterministic triage; it does not replace diagnostic facts.
     events=[]
@@ -248,12 +269,15 @@ def _plan_runs(store,runs,db,*,explicit):
             result.append(_activate_build(store,row,db));continue
         id_='facts_'+digest(canonical([run['id'],projection['source_fingerprint'],BUILDER_VERSION,projection['policy_digest']]))[:32]
         old=store.get('evidence_builds',id_,db)
+        version_ids=_observed_versions(store,run,db)
         if old:
+            if old.get('status') in {'awaiting_native_selection','blocked','superseded'}:
+                missing=[m for m in old['missing'] if m!='OBSERVED_CAPABILITY_VERSION_REQUIRED']
+                old={**old,'observed_version_ids':version_ids,
+                     'missing':missing+([] if version_ids else ['OBSERVED_CAPABILITY_VERSION_REQUIRED'])}
             old=_activate_build(store,old,db)
             if explicit or old['status']!='built':result.append(old)
             continue
-        version_ids=sorted({u['version_id'] for u in store.list('capability_invocations') if
-                            u.get('session_id')==run.get('execution_session_id',run.get('session_id')) and u.get('turn_id')==run.get('turn_id') and 'verified_read' in u.get('stages',[])})
         row={'id':id_,'run_id':run['id'],**projection,'observed_version_ids':version_ids,
              'status':'awaiting_native_selection','missing':['TASK_GOAL_REQUIRED','SUCCESS_CRITERIA_REQUIRED']+([] if version_ids else ['OBSERVED_CAPABILITY_VERSION_REQUIRED']),
              'created_at':now(),'model_attempts':0}
@@ -279,6 +303,8 @@ def build_selected_evidence(store, selection):
             db.execute('BEGIN')
             receipt=store.get('run_evidence',selection['run_id'],db)
             current=store.get('runs',selection['run_id'],db)
+            _current_scope(store,current)
+            if selection['version_id'] not in _observed_versions(store,current,db):raise ValueError('EVIDENCE_VERSION_NOT_OBSERVED')
             if not receipt or receipt.get('capsule_sha256')!=h or receipt.get('run_manifest_sha256')!=digest(canonical(current)):
                 raise ValueError('EVIDENCE_BUILD_READBACK_REQUIRED')
             return receipt

@@ -22,7 +22,9 @@
         "src/skill_observatory/transcripts.py",
         "src/skill_observatory/review_worker.py",
         "src/skill_observatory/proactive.py",
-        "src/skill_observatory/evidence.py"
+        "src/skill_observatory/evidence.py",
+        "src/skill_observatory/reviewer.py",
+        "src/skill_observatory/capabilities.py"
       ],
       "tests": [
         "tests/test_kernel.py::test_outside_scope_no_private_spool",
@@ -35,6 +37,9 @@
         "tests/test_proactive.py::test_pending_survives_restart_and_partial_receipt_never_discards_work",
         "tests/test_collection_recovery.py::test_9mib_gap_reaches_terminal_and_restart_never_double_consumes",
         "tests/test_evidence_builder.py::test_selection_build_is_change_driven_private_and_version_bound",
+        "tests/test_evidence_authority.py::test_revoked_scope_blocks_built_facts_before_admission_and_preserves_history",
+        "tests/test_evidence_authority.py::test_other_invocation_cannot_supply_observed_version_even_from_cached_plan",
+        "tests/test_evidence_authority.py::test_scope_revoked_during_setup_never_reaches_model_turn",
         "tests/test_proactive_manual.py::test_selected_session_preserves_daily_pending_and_scan_cursor"
       ]
     },

@@ -1,3 +1,61 @@
+# Evidence authorization, exact exec ingress and qualification — 2026-10-27
+
+Independent source review reproduced two factual-input failures: built capsules
+remained consumable after observation-scope revocation, and a parent run could
+bind a version read by another actor in the same session/turn. Factual planning,
+attachment and consumption now share the exact invocation predicate used by
+formal attribution, including actor, cwd and evidence-bound verified reads.
+Cached pending projections refresh that predicate. Consumption rechecks current
+scope, stored run identity and frozen v2 policy/source; invalid facts are withheld
+while original receipts remain intact. Reviewer setup rechecks before transport
+creation and before sending the model turn, covering revocation during admission
+and thread setup. The independent reproducers and all 12 new regressions fail
+against the earlier implementation and pass after repair. Authorized restoration,
+restart, legacy v1/v2 receipts and original no-replay/history behavior are covered.
+
+Two actual sources established the exact `0.164.0-alpha.11.1` App-bundled CLI
+exec shape. The existing strict exec adapter now admits that combination, with
+matching source, origin and session/execution identity required. Desktop handling
+and refusals for native children, incompatible sources and future versions remain.
+Both real sources drained to their captured EOF in isolated ledgers, producing
+45 and 77 events; reopening each ledger produced zero duplicate events. Neither
+source has terminal task completion, so their task outcomes remain unknown.
+
+The two original regressions fail before this change and pass after it.
+Validation passes 396 backend tests with required Docker execution, nine actual
+API/DOM tests and 114 focused tests against a clean installed wheel outside the
+checkout. All 34 installed package files match; the CLI, doctor, contract and
+distribution audit pass. Final Git/remote/CI identity is checked at delivery.
+The existing immutable service has not been upgraded.
+
+Two batches accounted for 24 conversation obligations: 14 sources received
+bounded body/tool review, nine exact sources were unavailable and one retained
+incompatible index/source identity. Changed frozen sources retain immediate
+follow-up. Historical interrupted reviews, incomplete Provider recovery and
+research-service failures retain their original owners. More sources remain;
+full-window and natural-task denominators are unknown.
+
+Current original-owner execution authentication now returns HTTP 200. A new
+isolated qualification completed both synthetic nonce turns and a schema review,
+with terminal usage, no tools forwarded and no retries. The frozen qualification
+still refuses: it requires an unverified outcome, while the returned review records
+`runtime_only/failed`. The failed qualification, transport and usage are retained;
+no schema proof was published, no consumed turn was replayed and no credential or
+production configuration was changed. Reviewing that outcome constraint belongs
+to the original qualification owner; it cannot be relaxed against this output.
+Monetary cost remains unknown.
+
+All three live lanes continue progressing and ledger integrity passes. Current
+source readback retains all seven factual capsules and 722 production review
+attempts; two capsules pass current consumption gates and five reviewed runs
+retain their existing manifest-drift refusals. No historical evidence is deleted
+or attempt reopened. The four exposed factual-input
+fingerprints and their original goal/version gaps are unchanged; no unchanged
+production semantic review was dispatched. Independent task truth, all-attempt
+costs and natural comparison samples remain incomplete: Skill gain HOLD, natural
+gain UNKNOWN and method RSI UNVERIFIED. The previous scheduled run was archived;
+this run's archive can only be verified after completion.
+
 # Daily receipt scope, current CLI ingress and qualification — 2026-10-26
 
 Independent source review reproduced a permission gap: an unselected daily chat

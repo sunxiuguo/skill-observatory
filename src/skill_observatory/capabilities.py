@@ -78,25 +78,31 @@ def _project_skill(store, cap, version, db):
     return store.put('skills', value, db)
 
 
-def bind_run_attributions(store, run, db, version_id=None):
-    """Bind only exact verified invocations for this execution, turn and actor.
-
-    Mention/selection and current disk bytes cannot establish historical loading.
-    The caller owns the transaction and any existing no-replay gate.
-    """
+def verified_run_invocations(store, run, db):
+    """One identity predicate for factual selection and Skill attribution."""
     execution = run.get('execution_session_id', run.get('session_id'))
     if not run.get('cwd') or not run.get('turn_id'):
-        return run  # Unknown legacy context cannot be reconstructed from a use.
+        return []  # Unknown legacy context cannot establish an observed version.
     rows = db.execute("SELECT data FROM entities WHERE kind='capability_invocations' "
         "AND json_extract(data,'$.session_id')=? AND json_extract(data,'$.turn_id')=?",
         (execution, run.get('turn_id'))).fetchall()
-    attributions = list(run.get('attributions', []))
+    result = []
     for raw in rows:
         invocation = json.loads(raw[0])
         if invocation.get('agent_id') != run.get('agent_id') or 'verified_read' not in invocation['stages'] \
-                or not invocation.get('evidence_ids') or (version_id and invocation['version_id'] != version_id):
+                or not invocation.get('evidence_ids'):
             continue
         if str(Path(invocation['cwd']).resolve()) != str(Path(run['cwd']).resolve()):
+            continue
+        result.append(invocation)
+    return result
+
+
+def bind_run_attributions(store, run, db, version_id=None):
+    """Bind exact verified reads; caller owns the transaction and no-replay gate."""
+    attributions = list(run.get('attributions', []))
+    for invocation in verified_run_invocations(store, run, db):
+        if version_id and invocation['version_id'] != version_id:
             continue
         _scope(store, invocation['cwd'])
         version = store.get('capability_versions', invocation['version_id'], db)

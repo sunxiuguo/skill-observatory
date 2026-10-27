@@ -15,8 +15,9 @@ ALPHA_17 = "0.162.0-alpha.17.2"
 ALPHA_10_APP = "0.163.0-alpha.10.2"
 ALPHA_11_APP = "0.163.0-alpha.11.1"
 VERIFIED_APP_VERSIONS = {ALPHA_17, ALPHA_10_APP, ALPHA_11_APP}
-VERIFIED_DESKTOP_ONLY_VERSIONS = {"0.164.0-alpha.11.1"}
+VERIFIED_DESKTOP_VERSIONS = {"0.164.0-alpha.11.1"}
 VERIFIED_EXEC_VERSIONS = {"0.162.1", "0.163.0", "0.164.0"}
+VERIFIED_APP_EXEC_VERSIONS = {"0.164.0-alpha.11.1"}
 CHILD_TERMINAL_EVENTS = {"SubagentStart", "SubagentStop"}
 
 
@@ -61,20 +62,22 @@ def _read_meta(store, path, source):
     if version in {"0.160.0", "0.160.1", "0.162.0-alpha.2"}:
         # These verified shapes use id as the transcript/session identity.
         pass
-    elif version in VERIFIED_EXEC_VERSIONS:
-        # Verified standalone CLI exec shape. App/child shapes need their own proof.
+    elif version in VERIFIED_EXEC_VERSIONS or (
+            version in VERIFIED_APP_EXEC_VERSIONS and source == 'codex-cli'):
+        # Exact standalone or App-bundled exec evidence; no child admission.
         if source != 'codex-cli' or meta.get('originator') != 'codex_exec' or meta.get('source') != 'exec':
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
         if not isinstance(meta.get('session_id'), str) or meta.get('session_id') != meta.get('id'):
             raise ValueError('TRANSCRIPT_SCHEMA_UNVERIFIED')
-    elif version in VERIFIED_APP_VERSIONS | VERIFIED_DESKTOP_ONLY_VERSIONS:
+    elif version in VERIFIED_APP_VERSIONS | VERIFIED_DESKTOP_VERSIONS:
         # The version string alone is not a contract. Current App transcripts
         # carry both the rollout/execution id and the logical parent session.
         desktop = meta.get('originator') == DESKTOP_APP_ORIGINATOR
         cli = meta.get('originator') == 'codex_exec'
         spawned = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
-        # Desktop evidence does not certify the same binary's CLI or children.
-        if version in VERIFIED_DESKTOP_ONLY_VERSIONS and (
+        # Separately verified exec shapes use the strict gate above.
+        # Desktop evidence alone does not certify native children.
+        if version in VERIFIED_DESKTOP_VERSIONS and (
                 source != 'codex-desktop' or not desktop or meta.get('source') != 'vscode'):
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
         # This newer artifact was observed in Desktop and its native children.
