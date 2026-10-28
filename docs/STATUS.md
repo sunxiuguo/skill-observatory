@@ -1,4 +1,22 @@
-# Exact CLI and direct-child ingress — 2026-10-28
+# Review consumption, pending isolation and CLI ingress — 2026-10-28
+
+Independent review reproduced two additional input-boundary defects. Late review
+readback could consume revoked facts after restart; a daily pending batch resumed
+by a different root could expose and accept that root's own work item. The root
+reproduced both with isolated synthetic inputs. Normal model completion and late
+readback now check current authorized facts against the dispatched capsule inside
+the acceptance writer transaction. Missing bindings, policy/version drift and
+corrupt artifacts are refused while terminal output and known usage remain.
+Restoring authority permits the same returned result to be checked without a
+new model turn. Original unknown attempts are not reopened or erased.
+
+Daily pending views now suppress the current root and its descendants using
+frozen lineage, including supported and unknown-version children and indirect
+descendants. The original manifest and unfinished obligations remain unchanged
+for later roots. Daily receipts recheck this exclusion and reject the entire
+receipt on violation; explicit selected-session review retains its own workflow.
+Eleven new regressions fail before the repairs and pass after them; additional
+coverage checks revocation at the atomic acceptance boundary.
 
 Two actual `0.165.0` standalone CLI sources and two native direct-child sources
 established the new exact shapes. The adapter now admits those combinations
@@ -12,9 +30,9 @@ All four real sources drained to their captured EOF in isolated ledgers, with
 28, 41, eight and eight events respectively. Reopening each ledger produced
 zero duplicate events. Neither captured CLI source had task completion;
 child terminal records do not establish original task acceptance or natural gain.
-Validation passes 399 backend tests with required Docker execution, 23 focused
+Validation passes 411 backend tests with required Docker execution, 23 focused
 transcript tests and nine actual API/DOM tests. A clean wheel installed outside
-the checkout passes 117 focused tests; all 34 package files match and its actual
+the checkout passes 153 focused tests; all 34 package files match and its actual
 CLI and doctor pass. Build and distribution audit pass. Final Git/remote/CI
 identity is checked at delivery.
 

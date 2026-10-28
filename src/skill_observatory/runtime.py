@@ -281,22 +281,26 @@ def process_one(store, reviewer=None):
     return receipt
 
 
-def accept_review(store, receipt, reviewer):
+def accept_review(store, receipt, reviewer, *, check_input=None):
     """Controlled verifier ingress; caller must be trusted, never a UI claim button."""
     from jsonschema import validate
     from importlib.resources import files
     schema=json.loads((files('skill_observatory')/'review.schema.json').read_text())
     validate(receipt,schema)
-    r=store.get('runs',receipt['run_id'])
-    if not r:raise ValueError('RUN_NOT_FOUND')
-    if receipt['reviewer_version']!=reviewer:raise ValueError('REVIEWER_ID_MISMATCH')
-    evidence=store.read_artifact(receipt['evidence_manifest_sha256'])
-    if digest(canonical(r))!=digest(evidence):raise ValueError('REVIEW_EVIDENCE_DRIFT')
-    if receipt['outcome']['source'] not in {'runtime_only','unknown'} or receipt['coverage']['outcome']=='verified' or receipt['outcome']['status']=='accepted':raise ValueError('INDEPENDENT_OUTCOME_RECEIPT_REQUIRED')
-    if receipt['skill_id']:
-        if not any(a['skill_id']==receipt['skill_id'] and a['package_sha256']==receipt['skill_package_sha256'] and a['attribution']==receipt['attribution'] for a in r['attributions']):raise ValueError('ATTRIBUTION_NOT_BOUND')
-    receipt={**receipt,"id":receipt['review_id'],"status":"reviewed","created_at":now()}
     with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        r=store.get('runs',receipt['run_id'],db)
+        if not r:raise ValueError('RUN_NOT_FOUND')
+        if receipt['reviewer_version']!=reviewer:raise ValueError('REVIEWER_ID_MISMATCH')
+        evidence=store.read_artifact(receipt['evidence_manifest_sha256'])
+        if digest(canonical(r))!=digest(evidence):raise ValueError('REVIEW_EVIDENCE_DRIFT')
+        if receipt['outcome']['source'] not in {'runtime_only','unknown'} or receipt['coverage']['outcome']=='verified' or receipt['outcome']['status']=='accepted':raise ValueError('INDEPENDENT_OUTCOME_RECEIPT_REQUIRED')
+        if receipt['skill_id']:
+            if not any(a['skill_id']==receipt['skill_id'] and a['package_sha256']==receipt['skill_package_sha256'] and a['attribution']==receipt['attribution'] for a in r['attributions']):raise ValueError('ATTRIBUTION_NOT_BOUND')
+        # Keep source/permission checks and state consumption in one writer
+        # transaction so a concurrent revocation cannot cross the boundary.
+        if check_input is not None:check_input()
+        receipt={**receipt,"id":receipt['review_id'],"status":"reviewed","created_at":now()}
         store.put('reviews',receipt,db);r['status']='reviewed';store.put('runs',r,db)
         db.execute("UPDATE jobs SET status='completed',reason_code=NULL WHERE run_id=?",(r['id'],))
     return receipt

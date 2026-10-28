@@ -17,7 +17,15 @@ skillobs --state PRIVATE_STATE retro-plan --index-db CODEX_INDEX --session-id SE
 
 pending 清单保留冻结义务，不重新读取来源。提交任何 chat 收据时都回查当前观测 scope；撤销后拒绝并回滚整份收据。选定项还需当前诊断 scope，普通每日项继续允许授权范围内的元数据记账。
 
+每日 pending 批次由不同根续接时，按冻结身份与谱系隐藏本次根及后代，
+不改写原清单或将这些义务记作完成；后续其他根仍可续接。每日完成收据也按其根
+重新检查该边界，拒绝自身或后代项，并回滚整份收据。显式手动选定批次沿原复盘流程。
+
 事实 capsule 的构建与消费也检查当前观测 scope。v2 消费重验冻结策略与来源；授权或来源漂移时保留旧证据并拒绝使用。计划、构建与正式归因共用精确 execution/session、turn、actor、cwd 及带证据的 verified-read 谓词，其他 actor 的读取不能绑定到当前 run。reviewer 在准入等待及 transport 准备之后、发送事实之前再次回查，不能把早先的授权当作持续有效。
+
+模型正常返回和崩溃后的延迟回读，在接受事务内都重验当前输入及原派发 capsule。
+撤权、来源/版本漂移、缺绑定或损坏制品阻止消费；终态、输出和已知用量仍保留，
+不重派模型。授权恢复且原输入仍匹配时，可以继续核对同一已返回结果。
 
 每日新计划跳过由 pending 手动批次持有的会话，并返回 `selected_pending_skipped`。历史重复工作单若已有较新审阅，旧收据继续拒绝覆盖；根检查最新审阅后，可在旧工作单的原 fingerprint 下明确采用最新 `evidence_sha256` 与 disposition。账本保存 `superseded_reviews` 指针及来源变化，原审阅、owner、证据和后续期限不重写。这只完成旧批次的记账，不把 follow_up/HOLD 改成修复或收益。
 

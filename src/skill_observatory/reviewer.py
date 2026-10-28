@@ -183,12 +183,24 @@ class CodexReviewer:
                 raw=blocks[0].strip()
             receipt=json.loads(raw)
             if receipt['review_id']!='rv_'+run['id'] or receipt['run_id']!=run['id'] or receipt['evidence_manifest_sha256']!=evidence:raise ValueError('REVIEW_BINDING_MISMATCH')
-            result=accept_review(store,receipt,version);save(status='completed');return result
+            result=accept_review(store,receipt,version,check_input=lambda:_check_attempt_input(store,attempt))
+            save(status='completed');return result
         except Exception as ex:
             # One ledger attempt, including failed/partial consumption. No invented zero.
             reason=str(ex) if re.fullmatch(r'[A-Z0-9_:-]{1,160}',str(ex)) else type(ex).__name__
             save(status='failed_after_dispatch' if attempt.get('terminal_status') else 'unknown_after_dispatch',reason_code=reason)
             raise
+
+
+def _check_attempt_input(store,attempt):
+    """Consumption requires current authorized facts and the dispatched bytes."""
+    run=store.get('runs',attempt['run_id'])
+    if run is None:raise ValueError('REVIEW_RUN_NOT_FOUND')
+    current=build_capsule(store,run)
+    if current['missing']:raise ValueError(current['missing'][0])
+    frozen=attempt.get('capsule_sha256')
+    if not isinstance(frozen,str):raise ValueError('REVIEW_CAPSULE_BINDING_REQUIRED')
+    if store.read_artifact(frozen)!=canonical(current):raise ValueError('REVIEW_CAPSULE_DRIFT')
 
 
 def reconcile_attempt(store,attempt_id,readback):
@@ -211,6 +223,12 @@ def reconcile_attempt(store,attempt_id,readback):
     receipt=json.loads(texts[-1])
     if receipt.get('run_id')!=attempt['run_id'] or receipt.get('review_id')!='rv_'+attempt['run_id']:
         raise ValueError('REVIEW_BINDING_MISMATCH')
-    result=accept_review(store,receipt,'codex-review-v2')
+    try:
+        result=accept_review(store,receipt,'codex-review-v2',check_input=lambda:_check_attempt_input(store,attempt))
+    except ValueError as error:
+        reason=str(error) if re.fullmatch(r'[A-Z0-9_:-]{1,160}',str(error)) else type(error).__name__
+        store.put('review_attempts',{**attempt,'reason_code':reason})
+        raise
+    attempt.pop('reason_code',None)
     store.put('review_attempts',{**attempt,'status':'completed'})
     return result

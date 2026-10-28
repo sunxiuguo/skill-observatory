@@ -55,6 +55,47 @@ def test_pending_survives_restart_and_partial_receipt_never_discards_work(tmp_pa
     assert plan(s, index, stamp=STAMP+2)['status'] == 'no_change'
 
 
+@pytest.mark.parametrize('unknown_child', [False, True])
+def test_pending_resume_excludes_current_root_and_descendants_without_consuming(tmp_path, monkeypatch, unknown_child):
+    s, scope, index = setup(tmp_path)
+    chat(scope, index, 'parent'); chat(scope, index, 'worker', child=True, version='99.0' if unknown_child else '0.162.0-alpha.17.2')
+    grandchild = chat(scope, index, 'grandchild', updated=STAMP-50, child=True, version='99.0' if unknown_child else '0.162.0-alpha.17.2')
+    meta = json.loads(grandchild.read_text()); meta['payload']['session_id'] = 'worker'
+    meta['payload']['source']['subagent']['thread_spawn']['parent_thread_id'] = 'worker'
+    grandchild.write_text(json.dumps(meta) + '\n')
+    chat(scope, index, 'other')
+    batch = plan(s, index, exclude_session='old-root', stamp=STAMP)
+    original = s.get('proactive_review_batches', 'active')
+    frozen = s.read_artifact(batch['manifest_sha256'])
+    from pathlib import Path
+    old_open = Path.open
+    def forbid_source(path, *args, **kwargs):
+        if path.suffix == '.jsonl':raise AssertionError('pending projection must not reread sources')
+        return old_open(path, *args, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, 'open', forbid_source)
+        resumed = plan(Store(s.root), index, exclude_session='parent', stamp=STAMP+1)
+    assert resumed['resumed'] and resumed['batch_id'] == batch['batch_id']
+    assert {i.get('session_id') for i in resumed['items']} == {None, 'other'}
+    assert resumed['current_root_excluded'] == 3 and resumed['total_batch_items'] == 5
+    assert s.get('proactive_review_batches', 'active') == original
+    assert s.read_artifact(batch['manifest_sha256']) == frozen
+    for sid in ['parent', 'worker', 'grandchild']:
+        forbidden = [i['id'] for i in batch['items'] if i.get('session_id') == sid]
+        forged = receipt(s, batch, ids=['self', *forbidden]); forged['root_session_id'] = 'parent'
+        with pytest.raises(ValueError, match='PROACTIVE_CURRENT_ROOT_EXCLUDED'):
+            finish(s, batch['batch_id'], forged, stamp=STAMP+2)
+        assert not s.list('proactive_review_items')
+        assert s.get('proactive_review_batches', 'active') == original
+    allowed = receipt(s, resumed); allowed['root_session_id'] = 'parent'
+    assert finish(s, batch['batch_id'], allowed, stamp=STAMP+2)['remaining'] == 3
+    later = plan(Store(s.root), index, exclude_session='later-root', stamp=STAMP+3)
+    assert {i.get('session_id') for i in later['items'] if i['id'] not in later.get('results', {})} == {'parent', 'worker', 'grandchild'}
+    final = receipt(s, later, stamp=STAMP+3, ids=[i['id'] for i in later['items'] if i['id'] not in later.get('results', {})])
+    final['root_session_id'] = 'later-root'
+    assert finish(s, batch['batch_id'], final, stamp=STAMP+3)['status'] == 'completed'
+
+
 def followup_case(tmp_path):
     s, scope, index = setup(tmp_path)
     for i in range(12): chat(scope, index, str(i))

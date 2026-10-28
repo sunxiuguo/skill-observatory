@@ -162,6 +162,21 @@ def _source(row, store, index_parent=None):
             'signal': signal, 'fingerprint': digest(canonical([VERSION, row['updated_at'], signal]))}
 
 
+def _current_root_items(items, root):
+    """Frozen lineage can suppress root input without rereading a source."""
+    sessions={root} if root else set(); excluded=set()
+    while True:
+        before=len(excluded)
+        for item in items:
+            if item['kind']!='chat':continue
+            signal=item['signal']; lineage=signal.get('exclusion_lineage',{})
+            ancestors=(signal.get('root_session_id'),signal.get('parent_session_id'),
+                       lineage.get('logical_session_id'),lineage.get('parent_session_id'))
+            if item['session_id'] in sessions or any(s in sessions for s in ancestors if s):
+                excluded.add(item['id']);sessions.add(item['session_id'])
+        if len(excluded)==before:return excluded
+
+
 def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None):
     """Resume an unfinished batch; otherwise discover bounded, changed in-scope chats.
 
@@ -179,6 +194,12 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
         db.execute('BEGIN IMMEDIATE')
         current = store.get('proactive_review_batches', 'active', db)
         if current and current['status'] == 'pending':
+            excluded=_current_root_items(current['items'],exclude_session)
+            if excluded:
+                return {**current,'resumed':True,
+                        'items':[i for i in current['items'] if i['id'] not in excluded],
+                        'results':{k:v for k,v in current.get('results',{}).items() if k not in excluded},
+                        'current_root_excluded':len(excluded),'total_batch_items':len(current['items'])}
             return {**current, 'resumed': True}
         prior_scan = store.get('proactive_review_state', 'scan', db) or {}
         cutoff = int(stamp - days * 86400)
@@ -267,10 +288,7 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
             visited.add(sid)
             item = row if row.get('kind') == 'chat' else _source(row, store, index_db.resolve().parent)
             scanned += 1
-            lineage = item['signal'].get('exclusion_lineage', {})
-            if exclude_session and exclude_session in (
-                    item['signal'].get('root_session_id'),
-                    lineage.get('logical_session_id'), lineage.get('parent_session_id')):
+            if _current_root_items([item],exclude_session):
                 skipped_internal += 1
                 continue
             previous = store.get('proactive_review_items', item['id'], db) or {}
@@ -415,6 +433,8 @@ def finish(store, batch_id, receipt, *, stamp=None):
         batch = next((b for b in batches if b['id'] != batch_id), batches[0])
         original = json.loads(store.read_artifact(batch['manifest_sha256']))
         by_id = {item['id']: item for item in original['items']}
+        excluded=(_current_root_items(original['items'],receipt['root_session_id'])
+                  if batch.get('mode')!='selected_session' else set())
         results = batch.get('results', {})
         source_changes = batch.get('source_changes', {})
         superseded = batch.get('superseded_reviews', {})
@@ -425,6 +445,7 @@ def finish(store, batch_id, receipt, *, stamp=None):
                     or result['disposition'] not in DISPOSITIONS:
                 raise ValueError('PROACTIVE_RESULT_INVALID')
             seen.add(result['id']); item = by_id[result['id']]
+            if item['id'] in excluded:raise ValueError('PROACTIVE_CURRENT_ROOT_EXCLUDED')
             if item['kind'] == 'chat' and not _inside_scope(store, item['cwd']):
                 raise ValueError('OUTSIDE_SCOPE')
             if batch.get('mode') == 'selected_session' or item['id'] in batch.get('diagnostic_item_ids', []):

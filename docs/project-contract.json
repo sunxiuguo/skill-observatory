@@ -36,6 +36,7 @@
         "tests/test_runtime_reliability.py::test_session_end_uses_source_time_and_no_time_stays_envelope",
         "tests/test_proactive.py::test_index_is_readonly_and_outside_transcript_is_never_opened",
         "tests/test_proactive.py::test_pending_survives_restart_and_partial_receipt_never_discards_work",
+        "tests/test_proactive.py::test_pending_resume_excludes_current_root_and_descendants_without_consuming",
         "tests/test_collection_recovery.py::test_9mib_gap_reaches_terminal_and_restart_never_double_consumes",
         "tests/test_evidence_builder.py::test_selection_build_is_change_driven_private_and_version_bound",
         "tests/test_evidence_authority.py::test_revoked_scope_blocks_built_facts_before_admission_and_preserves_history",
@@ -46,6 +47,8 @@
     },
     "O2": {
       "code": [
+        "src/skill_observatory/reviewer.py",
+        "src/skill_observatory/runtime.py",
         "src/skill_observatory/pipeline.py",
         "src/skill_observatory/final_gate.py",
         "src/skill_observatory/installations.py",
@@ -56,6 +59,10 @@
         "src/skill_observatory/evaluation.py"
       ],
       "tests": [
+        "tests/test_evidence_authority.py::test_late_readback_rechecks_scope_and_restores_without_dispatch",
+        "tests/test_evidence_authority.py::test_late_readback_rejects_changed_or_unbound_frozen_input",
+        "tests/test_evidence_authority.py::test_completed_model_turn_rechecks_input_before_accepting",
+        "tests/test_evidence_authority.py::test_late_readback_rechecks_at_atomic_acceptance_boundary",
         "tests/test_pipeline.py::test_unsigned_verdict_refusal_does_not_reach_installer",
         "tests/test_pipeline.py::test_missing_exploration_cost_stays_hold",
         "tests/test_final_gate.py::test_unsupported_gain_cannot_be_promoted_by_receipt_flags",
