@@ -32,6 +32,7 @@
         "tests/test_transcript_lifecycle.py::test_call_time_version_stays_bound_after_disk_change",
         "tests/test_runtime_reliability.py::test_review_block_does_not_block_api_collector",
         "tests/test_transcript_reliability.py::test_certified_app_child_nested_identity_and_exact_future_rejection",
+        "tests/test_transcript_reliability.py::test_165_cli_child_exact_identity_read_restart_and_refusals",
         "tests/test_runtime_reliability.py::test_session_end_uses_source_time_and_no_time_stays_envelope",
         "tests/test_proactive.py::test_index_is_readonly_and_outside_transcript_is_never_opened",
         "tests/test_proactive.py::test_pending_survives_restart_and_partial_receipt_never_discards_work",

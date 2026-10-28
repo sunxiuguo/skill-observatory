@@ -16,8 +16,9 @@ ALPHA_10_APP = "0.163.0-alpha.10.2"
 ALPHA_11_APP = "0.163.0-alpha.11.1"
 VERIFIED_APP_VERSIONS = {ALPHA_17, ALPHA_10_APP, ALPHA_11_APP}
 VERIFIED_DESKTOP_VERSIONS = {"0.164.0-alpha.11.1"}
-VERIFIED_EXEC_VERSIONS = {"0.162.1", "0.163.0", "0.164.0"}
+VERIFIED_EXEC_VERSIONS = {"0.162.1", "0.163.0", "0.164.0", "0.165.0"}
 VERIFIED_APP_EXEC_VERSIONS = {"0.164.0-alpha.11.1"}
+VERIFIED_DIRECT_CLI_CHILD_VERSIONS = {"0.165.0"}
 CHILD_TERMINAL_EVENTS = {"SubagentStart", "SubagentStop"}
 
 
@@ -62,6 +63,21 @@ def _read_meta(store, path, source):
     if version in {"0.160.0", "0.160.1", "0.162.0-alpha.2"}:
         # These verified shapes use id as the transcript/session identity.
         pass
+    elif version in VERIFIED_DIRECT_CLI_CHILD_VERSIONS and source == 'codex-subagent':
+        child_source = meta.get('source')
+        subagent = child_source.get('subagent') if isinstance(child_source, dict) else None
+        spawn = subagent.get('thread_spawn') if isinstance(subagent, dict) else None
+        if (meta.get('originator') != 'codex_exec' or meta.get('thread_source') != 'subagent'
+                or not isinstance(spawn, dict) or type(spawn.get('depth')) is not int
+                or spawn['depth'] != 1 or not isinstance(spawn.get('parent_thread_id'), str)
+                or not spawn['parent_thread_id']):
+            raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
+        # Only the observed direct-child shape is certified. Do not substitute
+        # the caller's expected root for a missing or incompatible parent.
+        if (meta.get('session_id') != spawn['parent_thread_id']
+                or not isinstance(meta.get('id'), str) or not meta['id']
+                or meta['id'] == meta['session_id']):
+            raise ValueError('TRANSCRIPT_SCHEMA_UNVERIFIED')
     elif version in VERIFIED_EXEC_VERSIONS or (
             version in VERIFIED_APP_EXEC_VERSIONS and source == 'codex-cli'):
         # Exact standalone or App-bundled exec evidence; no child admission.

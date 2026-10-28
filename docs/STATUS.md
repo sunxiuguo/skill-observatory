@@ -1,3 +1,42 @@
+# Exact CLI and direct-child ingress — 2026-10-28
+
+Two actual `0.165.0` standalone CLI sources and two native direct-child sources
+established the new exact shapes. The adapter now admits those combinations
+while requiring matching source, origin, execution identity and logical parent.
+The child gate requires native spawn metadata and the observed depth of one;
+nested CLI children, incompatible Desktop shapes and future versions remain
+refused. Hook/transcript reads retain one logical invocation and the child's
+independent identity. Three regressions fail before the change and pass after it.
+
+All four real sources drained to their captured EOF in isolated ledgers, with
+28, 41, eight and eight events respectively. Reopening each ledger produced
+zero duplicate events. Neither captured CLI source had task completion;
+child terminal records do not establish original task acceptance or natural gain.
+Validation passes 399 backend tests with required Docker execution, 23 focused
+transcript tests and nine actual API/DOM tests. A clean wheel installed outside
+the checkout passes 117 focused tests; all 34 package files match and its actual
+CLI and doctor pass. Build and distribution audit pass. Final Git/remote/CI
+identity is checked at delivery.
+
+Two batches accounted for 24 conversation obligations. Fourteen sources received
+bounded body/tool review, nine exact sources were unavailable and one retained
+incompatible source/index cwd identity. A large game source retains 19 oversized
+record gaps; skipped records were hashed, not counted as reviewed. Five changed
+frozen sources retain immediate follow-up. Historical transport failures,
+incomplete recovery and device acceptance remain with their original owners.
+More sources remain; full-window and natural-task denominators are unknown.
+
+The live lanes remain healthy and ledger integrity passes. Current readback
+retains seven factual capsules, 28 reviews and 722 production review attempts;
+two capsules pass current consumption gates and five retain manifest-drift
+refusals. The four exposed factual-input fingerprints and their original
+goal/version gaps are unchanged. The earlier independent background qualification
+remains refused, with no new protocol or proof; no unchanged semantic review was
+dispatched. The immutable service still uses its earlier build. Source delivery
+does not authorize a runtime upgrade or establish Skill improvement. Skill gain
+remains HOLD, natural gain UNKNOWN and method RSI UNVERIFIED. The previous
+scheduled run is archived; this run's archive is verifiable only after completion.
+
 # Evidence authorization, exact exec ingress and qualification — 2026-10-27
 
 Independent source review reproduced two factual-input failures: built capsules

@@ -74,8 +74,10 @@ The versioned transcript adapter supports certified 0.160.0/0.160.1 and
 0.162.0-alpha.2 fixtures, plus the exact 0.162.0-alpha.17.2,
 0.163.0-alpha.10.2 and 0.163.0-alpha.11.1 Desktop/subagent metadata shapes,
 the exact 0.164.0-alpha.11.1 Desktop and App-bundled CLI exec shapes, and the
-exact 0.162.1/0.163.0/0.164.0 standalone CLI exec shape. The 0.164 App's child
-shape remains unverified and refused. Unknown
+exact 0.162.1/0.163.0/0.164.0/0.165.0 standalone CLI exec shape. The exact
+0.165.0 CLI direct-child shape is also supported, with matching logical parent,
+execution identity and native spawn metadata required. Nested 0.165 CLI children
+and the 0.164 App's child shape remain unverified and refused. Unknown
 versions or incompatible source/schema combinations stay HOLD. It
 checks session/scope/cursor identity, and uses the same runtime/spool.
 Exact Skill bytes observed in native tool output can support `verified_read`;

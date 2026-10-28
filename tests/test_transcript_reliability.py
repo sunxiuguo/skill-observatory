@@ -40,7 +40,7 @@ def test_certified_cli_and_app_schema_and_source_controls(tmp_path,version,sourc
   with pytest.raises(ValueError,match='SCHEMA_UNVERIFIED'):observe_session(s,p,'parent',source)
 
 
-@pytest.mark.parametrize('version',['0.162.1','0.163.0','0.164.0','0.164.0-alpha.11.1'])
+@pytest.mark.parametrize('version',['0.162.1','0.163.0','0.164.0','0.164.0-alpha.11.1','0.165.0'])
 def test_stable_cli_exec_identity_and_unverified_source_refusal(tmp_path,version):
  s,p,m=setup(tmp_path,version);m.update(originator='codex_exec',source='exec')
  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
@@ -53,7 +53,7 @@ def test_stable_cli_exec_identity_and_unverified_source_refusal(tmp_path,version
   with pytest.raises(ValueError,match=reason):observe_session(s,p,'parent','codex-cli')
 
 
-@pytest.mark.parametrize('version',['0.163.0','0.164.0','0.164.0-alpha.11.1'])
+@pytest.mark.parametrize('version',['0.163.0','0.164.0','0.164.0-alpha.11.1','0.165.0'])
 def test_stable_exec_exact_read_restart_and_identity_refusal(tmp_path,version):
  s,p,m=setup(tmp_path,version);m.update(originator='codex_exec',source='exec',thread_source='automation')
  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
@@ -155,6 +155,51 @@ def test_child_hook_transcript_read_is_one_logical_invocation(tmp_path,version):
  observe_session(s,p,'child','codex-subagent');ingest(s)
  assert len(s.list('runs'))==1 and len(s.list('capability_invocations'))==1
  assert 'verified_read' in s.list('capability_invocations')[0]['stages']
+
+
+def test_165_cli_child_exact_identity_read_restart_and_refusals(tmp_path):
+ s,p,m=setup(tmp_path,'0.165.0',child=True);m['originator']='codex_exec'
+ p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
+ skill=tmp_path/'flow';skill.mkdir();text='---\nname: flow\ndescription: flow\n---\nActual child instructions.\n'
+ (skill/'SKILL.md').write_text(text);register(s,skill,'owner')
+ with pytest.raises(ValueError,match='SESSION_ID_MISMATCH'):observe_session(s,p,'unrelated','codex-subagent')
+ assert not s.list('cursors') and not list((s.root/'spool').glob('*.json'))
+ selected=track_hook_session(s,dict(event='SubagentStart',session_id='parent',agent_id='child',turn_id='t',transcript_path=str(p)))
+ append(p,{'turn_id':'t'},'turn_context')
+ append(p,{'type':'function_call','call_id':'call','name':'exec_command','arguments':'cat '+str(skill/'SKILL.md')},'response_item')
+ append(p,{'type':'function_call_output','call_id':'call','output':text},'response_item')
+ append(p,{'type':'task_complete','turn_id':'t'})
+ spool(s,dict(hook_event_name='PreToolUse',session_id='parent',agent_id='child',turn_id='t',tool_use_id='call',cwd=str(tmp_path),tool_input='cat '+str(skill/'SKILL.md')))
+ result=observe_session(s,p,'child','codex-subagent');ingest(s)
+ assert result['new_events']==3 and selected['parent_session_id']=='parent'
+ assert len(s.list('runs'))==1 and len(s.list('capability_invocations'))==1
+ run=s.list('runs')[0];assert (run['session_id'],run['agent_id'],run['parent_session_id'],run['root_session_id'])==('child','child','parent','parent')
+ assert 'verified_read' in s.list('capability_invocations')[0]['stages']
+ from skill_observatory.proactive import _source
+ item=_source({'id':'child','cwd':str(tmp_path),'rollout_path':str(p),'updated_at':1},s)
+ assert item['evidence_class']=='child_execution' and item['signal']['source']=='codex-subagent'
+ assert 'reason_code' not in item['signal']
+ restarted=Store(s.root);assert observe_session(restarted,p,'child','codex-subagent')['new_events']==0
+ ingest(restarted);assert len(restarted.list('capability_invocations'))==1
+ for patch,source,reason in [
+  ({'originator':'Codex Desktop'},'codex-subagent','SOURCE_SCHEMA_UNVERIFIED'),
+  ({'thread_source':'automation'},'codex-subagent','SOURCE_SCHEMA_UNVERIFIED'),
+  ({'source':'exec'},'codex-subagent','SOURCE_SCHEMA_UNVERIFIED'),
+  ({'source':{'subagent':None}},'codex-subagent','SOURCE_SCHEMA_UNVERIFIED'),
+  ({'source':{'subagent':{'thread_spawn':{'depth':1}}}},'codex-subagent','SOURCE_SCHEMA_UNVERIFIED'),
+  ({'source':{'subagent':{'thread_spawn':{'parent_thread_id':'parent','depth':True}}}},'codex-subagent','SOURCE_SCHEMA_UNVERIFIED'),
+  ({'source':{'subagent':{'thread_spawn':{'parent_thread_id':'other','depth':1}}}},'codex-subagent','SCHEMA_UNVERIFIED'),
+  ({'source':{'subagent':{'thread_spawn':{'parent_thread_id':'parent','depth':2}}}},'codex-subagent','SOURCE_SCHEMA_UNVERIFIED'),
+  ({'session_id':'child'},'codex-subagent','SCHEMA_UNVERIFIED'),
+  ({'session_id':None},'codex-subagent','SCHEMA_UNVERIFIED'),
+  ({'id':'parent'},'codex-subagent','SCHEMA_UNVERIFIED'),
+  ({'id':None},'codex-subagent','SCHEMA_UNVERIFIED'),
+  ({'cli_version':'0.165.1'},'codex-subagent','VERSION_UNVERIFIED'),
+  ({'cli_version':'0.166.0'},'codex-subagent','VERSION_UNVERIFIED'),
+  ({},'codex-cli','SOURCE_SCHEMA_UNVERIFIED'),
+  ({},'codex-desktop','SOURCE_SCHEMA_UNVERIFIED')]:
+  p.write_text(json.dumps({'type':'session_meta','payload':{**m,**patch}})+'\n')
+  with pytest.raises(ValueError,match=reason):observe_session(restarted,p,'child',source)
 
 
 def test_archive_relocation_is_exact_prefix_atomic_and_consumes_appended_tail(tmp_path):
