@@ -59,10 +59,6 @@
         "src/skill_observatory/evaluation.py"
       ],
       "tests": [
-        "tests/test_evidence_authority.py::test_late_readback_rechecks_scope_and_restores_without_dispatch",
-        "tests/test_evidence_authority.py::test_late_readback_rejects_changed_or_unbound_frozen_input",
-        "tests/test_evidence_authority.py::test_completed_model_turn_rechecks_input_before_accepting",
-        "tests/test_evidence_authority.py::test_late_readback_rechecks_at_atomic_acceptance_boundary",
         "tests/test_pipeline.py::test_unsigned_verdict_refusal_does_not_reach_installer",
         "tests/test_pipeline.py::test_missing_exploration_cost_stays_hold",
         "tests/test_final_gate.py::test_unsupported_gain_cannot_be_promoted_by_receipt_flags",
@@ -78,7 +74,11 @@
         "tests/test_revision3_feedback.py::test_native_execution_boundary_rejects_full_mode_and_type_drift",
         "tests/test_revision3_feedback.py::test_accepted_cache_rechecks_disk_and_natural_authority_expiry",
         "tests/test_revision3_feedback.py::test_real_container_executes_exact_mode_only_package_difference",
-        "tests/test_revision3_feedback.py::test_final_rejects_resealed_trial_that_loaded_wrong_full_mode"
+        "tests/test_revision3_feedback.py::test_final_rejects_resealed_trial_that_loaded_wrong_full_mode",
+        "tests/test_evidence_authority.py::test_late_readback_rechecks_scope_and_restores_without_dispatch",
+        "tests/test_evidence_authority.py::test_late_readback_rejects_changed_or_unbound_frozen_input",
+        "tests/test_evidence_authority.py::test_completed_model_turn_rechecks_input_before_accepting",
+        "tests/test_evidence_authority.py::test_late_readback_rechecks_at_atomic_acceptance_boundary"
       ]
     },
     "O3": {
