@@ -42,7 +42,9 @@
         "tests/test_evidence_authority.py::test_revoked_scope_blocks_built_facts_before_admission_and_preserves_history",
         "tests/test_evidence_authority.py::test_other_invocation_cannot_supply_observed_version_even_from_cached_plan",
         "tests/test_evidence_authority.py::test_scope_revoked_during_setup_never_reaches_model_turn",
-        "tests/test_proactive_manual.py::test_selected_session_preserves_daily_pending_and_scan_cursor"
+        "tests/test_proactive_manual.py::test_selected_session_preserves_daily_pending_and_scan_cursor",
+        "tests/test_transcript_reliability.py::test_exact_desktop_observation_restart_and_unverified_surfaces",
+        "tests/test_transcript_reliability.py::test_exact_desktop_rejects_other_logical_session_before_cursor"
       ]
     },
     "O2": {

@@ -15,7 +15,7 @@ ALPHA_17 = "0.162.0-alpha.17.2"
 ALPHA_10_APP = "0.163.0-alpha.10.2"
 ALPHA_11_APP = "0.163.0-alpha.11.1"
 VERIFIED_APP_VERSIONS = {ALPHA_17, ALPHA_10_APP, ALPHA_11_APP}
-VERIFIED_DESKTOP_VERSIONS = {"0.164.0-alpha.11.1"}
+VERIFIED_DESKTOP_VERSIONS = {"0.164.0-alpha.11.1", "0.165.0-alpha.1.2"}
 VERIFIED_EXEC_VERSIONS = {"0.162.1", "0.163.0", "0.164.0", "0.165.0"}
 VERIFIED_APP_EXEC_VERSIONS = {"0.164.0-alpha.11.1"}
 VERIFIED_DIRECT_CLI_CHILD_VERSIONS = {"0.165.0"}
@@ -96,6 +96,8 @@ def _read_meta(store, path, source):
         if version in VERIFIED_DESKTOP_VERSIONS and (
                 source != 'codex-desktop' or not desktop or meta.get('source') != 'vscode'):
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
+        if version in VERIFIED_DESKTOP_VERSIONS and meta.get('session_id') != meta.get('id'):
+            raise ValueError('TRANSCRIPT_SCHEMA_UNVERIFIED')
         # This newer artifact was observed in Desktop and its native children.
         # Its standalone CLI shape has not been verified by those observations.
         if version in {ALPHA_10_APP, ALPHA_11_APP} and (not desktop or source == 'codex-cli'

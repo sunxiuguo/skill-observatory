@@ -1,3 +1,55 @@
+# Desktop ingress and stalled-lane recovery — 2026-10-29
+
+Five actual authorized sources establish the exact `0.165.0-alpha.1.2`
+Desktop metadata shape. The existing adapter now admits it through the Desktop
+source/origin gate. Desktop-only shapes also require equal execution and logical
+session IDs before a cursor or spool event can be created. Fresh mismatched
+identities are refused, including the previously admitted `0.164.0-alpha.11.1`
+shape. New App CLI exec/child shapes and future versions remain unverified.
+Four focused cases fail before the repair; all 26 transcript tests pass after it.
+
+The five real sources reached their captured EOF in isolated ledgers, producing
+24, 20, 18, 22 and 16 events. Each retained its own execution identity and one
+terminal run; reopening each ledger produced zero duplicate events and no
+semantic gap. Captured termination does not establish original task acceptance.
+Required-Docker backend validation passes 414 tests. Nine actual API/DOM tests,
+97 focused tests against a clean wheel outside the checkout, the installed CLI
+and doctor pass. All 34 installed package files match. Contract and distribution
+checks pass; final Git/remote/CI identity is checked at delivery. The first Web
+test overlapped dependency installation and could not find its test executable;
+the completed-build retry passes. That root coordination error remains rework.
+
+The existing service had an HTTP listener but all three worker receipts had
+stopped advancing for about 20 hours, with 10,915 spooled deliveries. Ledger
+integrity passed; the pre-restart process sample showed idle executor threads.
+After a verified database/configuration/health backup, the original lifecycle
+stopped and started the same installed package. All three lanes resumed progress
+and the sampled spool drained to zero. Configuration and build hashes are
+unchanged. The original stall cause is not conclusively established; recovery
+alone does not prove a preventive fix. Existing source-level worker failure
+recovery regressions pass. This is operational recovery, not a runtime upgrade;
+accepted newer source repairs remain absent from that immutable installation.
+
+Two batches accounted for 24 conversation obligations: 15 received bounded
+body/tool review, eight exact sources were unavailable and one retained an
+incompatible index/source cwd. A large research source was inspected only at
+selected goal, terminal and tool boundaries. Four changed frozen sources retain
+immediate follow-up. Historical partial recoveries and unresolved proposal
+ownership remain with their original owners. More sources remain; full-window
+and natural-task denominators are unknown.
+
+Chain readback retains seven factual capsules, 28 completed reviews and 722
+production review attempts. Reviews contain 22 HOLD and six NO_CHANGE decisions;
+there is no candidate, experiment or installation. Two capsules pass current
+consumption gates; five retain manifest-drift refusals. The four exposed factual
+fingerprints and their goal/version gaps are unchanged. Background semantic
+qualification still refuses under its original frozen protocol; no old model
+attempt or cutoff was replayed. Ordinary external audit admission also refused
+because the current App artifact lacks exact native-child certification; the
+root completed local validation without changing that gate. Skill gain remains
+HOLD, natural gain UNKNOWN and method RSI UNVERIFIED. The prior scheduled run is
+archived; this run's archive is verifiable only after completion.
+
 # Review consumption, pending isolation and CLI ingress — 2026-10-28
 
 Independent review reproduced two additional input-boundary defects. Late review

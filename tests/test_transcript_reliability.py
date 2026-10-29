@@ -89,8 +89,9 @@ def test_stable_exec_exact_read_restart_and_identity_refusal(tmp_path,version):
  assert len(later)==1 and 'verified_read' not in later[0]['stages']
 
 
-def test_164_desktop_observation_restart_and_unverified_surfaces(tmp_path):
- s,p,m=setup(tmp_path,'0.164.0-alpha.11.1');m['thread_source']='automation'
+@pytest.mark.parametrize('version',['0.164.0-alpha.11.1','0.165.0-alpha.1.2'])
+def test_exact_desktop_observation_restart_and_unverified_surfaces(tmp_path,version):
+ s,p,m=setup(tmp_path,version);m['thread_source']='automation'
  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
  append(p,{'turn_id':'t'},'turn_context')
  append(p,{'type':'task_started','turn_id':'t'})
@@ -105,18 +106,25 @@ def test_164_desktop_observation_restart_and_unverified_surfaces(tmp_path):
  assert not result['parent_session_id'] and not result['agent_id']
  from skill_observatory.proactive import _source
  selected=_source({'id':'parent','cwd':str(tmp_path),'rollout_path':str(p),'updated_at':1},s)
- assert selected['signal']['adapter_version']=='0.164.0-alpha.11.1'
+ assert selected['signal']['adapter_version']==version
  assert selected['signal']['source']=='codex-desktop' and 'reason_code' not in selected['signal']
  restarted=Store(s.root)
  assert observe_session(restarted,p,'parent','codex-desktop')['new_events']==0
  ingest(restarted);assert len(restarted.list('runs'))==1
  for patch,source,reason in [
   ({'cli_version':'0.164.0-alpha.11.2'},'codex-desktop','VERSION_UNVERIFIED'),
+  ({'cli_version':'0.165.0-alpha.1.3'},'codex-desktop','VERSION_UNVERIFIED'),
+  ({'session_id':'other'},'codex-desktop','SCHEMA_UNVERIFIED'),
+  ({'originator':'codex_exec','source':'vscode'},'codex-cli','SOURCE_SCHEMA_UNVERIFIED'),
   ({'source':'cli'},'codex-desktop','SOURCE_SCHEMA_UNVERIFIED'),
   ({'thread_source':'subagent','source':{'subagent':{'thread_spawn':{'parent_thread_id':'parent','depth':1}}}},'codex-subagent','SOURCE_SCHEMA_UNVERIFIED'),
   ({'session_id':None},'codex-desktop','SCHEMA_UNVERIFIED')]:
   p.write_text(json.dumps({'type':'session_meta','payload':{**m,**patch}})+'\n')
   with pytest.raises(ValueError,match=reason):observe_session(restarted,p,'parent',source)
+ if version=='0.165.0-alpha.1.2':
+  p.write_text(json.dumps({'type':'session_meta','payload':{**m,'originator':'codex_exec','source':'exec'}})+'\n')
+  with pytest.raises(ValueError,match='SOURCE_SCHEMA_UNVERIFIED'):
+   observe_session(restarted,p,'parent','codex-cli')
 
 
 @pytest.mark.parametrize('child',[False,True])
@@ -239,3 +247,16 @@ def test_closed_session_drains_late_tail_once_and_attachment_prefix_is_exact(tmp
  for _ in range(3):collect(s)
  assert len(s.list('runs'))==1 and len(s.jobs())==1
  assert s.list('cursors')[0]['offset']==p.stat().st_size
+
+
+@pytest.mark.parametrize('version',['0.164.0-alpha.11.1','0.165.0-alpha.1.2'])
+def test_exact_desktop_rejects_other_logical_session_before_cursor(tmp_path,version):
+ s,p,m=setup(tmp_path,version);m['session_id']='other'
+ p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
+ append(p,{'type':'task_complete','turn_id':'t'})
+ with pytest.raises(ValueError,match='SCHEMA_UNVERIFIED'):
+  observe_session(s,p,'other','codex-desktop')
+ assert not s.list('cursors') and not list((s.root/'spool').glob('*.json'))
+ from skill_observatory.proactive import _source
+ selected=_source({'id':'parent','cwd':str(tmp_path),'rollout_path':str(p),'updated_at':1},s)
+ assert selected['signal']['reason_code']=='TRANSCRIPT_SCHEMA_UNVERIFIED'
