@@ -1,3 +1,40 @@
+# Selected factual input recovered — 2026-10-30
+
+One authorized historical task now has a version-bound v2 factual capsule through
+the existing `evidence-plan` / `evidence-build` owner. Selected source records bind
+the task goal, success criteria, exact observed Skill version, execution/turn and
+model/runtime evidence. Actual readback succeeds; the identical submission is
+idempotent and creates no model attempt. Runtime termination and compaction
+handoffs retain an unknown task result. A comparison command returning differences
+is not treated as independent failed validation or evidence of Skill causality.
+
+The ledger contains eight factual capsules: three currently pass consumption
+gates and five retain manifest-drift refusals. Production review attempts remain
+722, with no candidate, experiment, installation or independent task receipt.
+Background semantic qualification remains HOLD under its original protocol;
+no old attempt was replayed or qualification threshold changed. The remaining
+version-bound historical source gap is unavailable at its exact indexed/archive
+location. Other missing-version obligations remain visible.
+
+Two batches account for 24 conversation obligations. Fourteen source bodies
+received bounded inspection, including two without completed tool work; nine
+exact sources are unavailable and one has a source/index cwd mismatch. Two large
+document sessions retain 39 oversized-record gaps. An additional selected
+historical turn supplied the new capsule; neither its scanned record count nor
+terminal-looking handoffs establish comprehensive manual or task acceptance.
+One recent maintenance session discarded process metadata, repeated a command
+and retained no execution terminal; both attempts remain unresolved with the
+original owner. More sources remain pending, with full-window and natural-task
+denominators unknown.
+
+All three installed worker lanes are progressing and the sampled spool is empty;
+no service change or runtime upgrade was performed. The previous scheduled run
+is archived; this run's archival can only be verified after completion. Fifty
+focused evidence-builder, recovery and authority tests pass, as does the project
+contract check. Only this public status record changes; source behavior and
+installed global Skills are unchanged. Skill gain remains HOLD, natural gain
+UNKNOWN and recursive-method gain UNVERIFIED.
+
 # Desktop ingress and stalled-lane recovery — 2026-10-29
 
 Five actual authorized sources establish the exact `0.165.0-alpha.1.2`
