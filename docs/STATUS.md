@@ -1,3 +1,40 @@
+# Exact 0.166 transcript ingress — 2026-10-31
+
+Four authorized Desktop sources establish the exact `0.166.0-alpha.5.1`
+shape; one standalone CLI source establishes `0.166.0` exec. The existing
+adapter now admits those combinations with the same source, origin and session
+identity checks. New App exec/child shapes, CLI children, incompatible identities
+and future versions remain refused. Four new cases fail before the repair;
+33 focused transcript tests pass after it.
+
+All five real sources reach their captured EOF in isolated ledgers, with 24,
+26, 20 and 20 Desktop events and 15 CLI events. Every source is unchanged during
+validation, retains its execution identity and produces zero duplicate events
+after reopening. Runtime events do not establish original task acceptance.
+
+Validation passes 418 backend tests with required Docker execution, nine actual
+API/DOM tests, build/distribution audit and 33 focused tests against the exact
+current wheel outside the checkout. All 30 installed Python files match the
+source; the installed CLI and doctor pass. The initial installation check chose
+a historical wheel and failed; its result is retained separately from acceptance
+of the current build. Final Git/remote/CI identity is read back at delivery.
+
+Two batches account for 24 conversation obligations: 13 receive bounded body
+inspection, nine exact sources are unavailable, one available transport shape
+remains unverified and one retains an index/source cwd mismatch. Two large sources
+retain 16 oversized-record gaps. Selected latest tool readback preserves original
+visual-review and independent-owner follow-ups; partial historical workers are
+not accepted independent validation. More sources remain; full-window and natural
+task denominators are unknown.
+
+All three installed worker lanes are progressing. No service update or global
+Skill write is performed; the immutable installed runtime still lacks accepted
+newer source repairs. The factual/evaluation chain retains eight capsules, 28
+reviews and 722 production review attempts, with no candidate, experiment,
+installation or independent task receipt. Existing missing-source/version,
+protocol qualification and all-attempt cost obligations remain. Skill gain stays
+HOLD, natural gain UNKNOWN and recursive-method gain UNVERIFIED.
+
 # Selected factual input recovered — 2026-10-30
 
 One authorized historical task now has a version-bound v2 factual capsule through
