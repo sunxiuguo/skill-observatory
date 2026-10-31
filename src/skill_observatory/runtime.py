@@ -145,6 +145,7 @@ def ingest(store,limit=512):
                             'reason_code':'TRUSTED_TURN_ORDER_REQUIRED','created_at':e['created_at']},db)
                     if not (e['event']=='SessionEnd' and not e.get('turn_id')):
                         r=store.get('runs',run_id,db) or {"id":run_id,"session_id":execution,"execution_session_id":execution,"parent_session_id":e.get('parent_session_id'),"turn_id":e.get('turn_id'),"agent_id":e.get('agent_id'),"origin":e['origin'],"created_at":e['created_at'],"event_ids":[],"status":"evidence_pending","outcome":"unverified","attributions":[],"missing":[],"cwd":e.get("cwd")}
+                        if r.get('origin') != e['origin']:raise ValueError('RUN_ORIGIN_CONFLICT')
                         r.setdefault('sources',[])
                         if e['source'] not in r['sources']:r['sources'].append(e['source'])
                         if e['source']=='codex-subagent' and e.get('parent_session_id'):

@@ -80,8 +80,10 @@ def _project_skill(store, cap, version, db):
 
 def verified_run_invocations(store, run, db):
     """One identity predicate for factual selection and Skill attribution."""
+    from .runtime import ORIGINS
     execution = run.get('execution_session_id', run.get('session_id'))
-    if not run.get('cwd') or not run.get('turn_id'):
+    origin = run.get('origin')
+    if not isinstance(origin, str) or origin not in ORIGINS or not run.get('cwd') or not run.get('turn_id'):
         return []  # Unknown legacy context cannot establish an observed version.
     rows = db.execute("SELECT data FROM entities WHERE kind='capability_invocations' "
         "AND json_extract(data,'$.session_id')=? AND json_extract(data,'$.turn_id')=?",
@@ -89,12 +91,25 @@ def verified_run_invocations(store, run, db):
     result = []
     for raw in rows:
         invocation = json.loads(raw[0])
-        if invocation.get('agent_id') != run.get('agent_id') or 'verified_read' not in invocation['stages'] \
+        if invocation.get('origin') != origin or invocation.get('agent_id') != run.get('agent_id') or 'verified_read' not in invocation['stages'] \
                 or not invocation.get('evidence_ids'):
             continue
         if str(Path(invocation['cwd']).resolve()) != str(Path(run['cwd']).resolve()):
             continue
-        result.append(invocation)
+        # Legacy aggregates could merge a canary read into a user invocation.
+        # Require a matching read receipt, not just that aggregate's label.
+        for oid in invocation.get('observation_ids', []):
+            proof = store.get('capability_observations', oid, db) or {}
+            if (proof.get('invocation_record_id') == invocation['id']
+                    and proof.get('stage') == 'verified_read'
+                    and proof.get('origin', 'user_run') == origin
+                    and proof.get('evidence_sha256') in invocation['evidence_ids']
+                    and all(proof.get(k) == invocation.get(k) for k in
+                            ('capability_id', 'version_id', 'session_id', 'turn_id', 'agent_id'))
+                    and isinstance(proof.get('cwd'), str)
+                    and Path(proof['cwd']).resolve() == Path(invocation['cwd']).resolve()):
+                result.append(invocation)
+                break
     return result
 
 
@@ -256,6 +271,7 @@ def drift_actions(store,limit=8):
 
 def record_usage(store,receipt):
     r=dict(receipt)
+    origin = _text(r.get('origin', 'user_run'), 'origin', True)
     for field in ('capability_id','version_id','cwd','session_id','turn_id','invocation_id','stage','source','event_id'):_text(r.get(field),field,True)
     if r['stage'] not in STAGES:raise ValueError('INVALID_USAGE_STAGE')
     _scope(store,r['cwd'])
@@ -276,11 +292,14 @@ def record_usage(store,receipt):
         db.execute('BEGIN IMMEDIATE');prior=store.get('capability_observations',eid,db)
         if prior:
             if prior!=observed:raise ValueError('USAGE_EVENT_ID_CONFLICT')
-            return store.get('capability_invocations',iid,db)
+            existing = store.get('capability_invocations',iid,db)
+            if existing and existing.get('origin') != origin:raise ValueError('INVOCATION_ORIGIN_CONFLICT')
+            return existing
         u=store.get('capability_invocations',iid,db) or {'id':iid,'capability_id':cap['id'],'version_id':v['id'],'session_id':r['session_id'],'turn_id':r['turn_id'],
             'agent_id':r.get('agent_id'),'cwd':str(cwd),'scenario':r.get('scenario'),'origin':r.get('origin','user_run'),'created_at':now(),
             'stages':[],'sources':[],'attempts':[],'evidence_ids':[],'observation_ids':[],'status':'observed','missing':[]}
         if u['cwd']!=str(cwd):raise ValueError('INVOCATION_CONTEXT_CONFLICT')
+        if u.get('origin')!=origin:raise ValueError('INVOCATION_ORIGIN_CONFLICT')
         for key,value in (('stages',r['stage']),('sources',r['source']),('attempts',r.get('attempt_id')),('evidence_ids',r.get('evidence_sha256')),('observation_ids',eid)):
             if value and value not in u[key]:u[key].append(value)
         if r.get('scenario'):

@@ -1,4 +1,23 @@
-# Exact 0.166 transcript ingress — 2026-10-31
+# Exact ingress and origin-bound factual reads — 2026-10-31
+
+Independent public-source review reproduced a separate attribution defect:
+a canary read could supply the observed Skill version for an ordinary run,
+and different origins could merge into one invocation. The root reproduced
+the original case and control. Invocation updates now reject origin changes;
+factual selection and consumption require a matching origin and an actual
+verified-read observation. This also withholds legacy aggregates whose label
+conceals a cross-origin read. Receipts and consumed attempts are preserved.
+Mixed-origin events are quarantined with their original bytes before changing
+a run; valid observations can continue without replaying the refused event.
+Synthetic usage metadata remains supported and cannot supply an ordinary run.
+
+Thirteen refusal regressions fail against the original modules while two valid
+controls pass. The repaired source passes 70 focused factual/usage cases,
+including bidirectional origin mismatch, legacy v1/v2 consumption, duplicate
+receipt readback and same-origin multichannel recovery. These are isolated
+mechanism checks, not evidence of natural task gain or a complete activation
+bypass. The independently reviewed finding is accepted; domain evaluation stays
+with its existing owner.
 
 Four authorized Desktop sources establish the exact `0.166.0-alpha.5.1`
 shape; one standalone CLI source establishes `0.166.0` exec. The existing
@@ -12,8 +31,8 @@ All five real sources reach their captured EOF in isolated ledgers, with 24,
 validation, retains its execution identity and produces zero duplicate events
 after reopening. Runtime events do not establish original task acceptance.
 
-Validation passes 418 backend tests with required Docker execution, nine actual
-API/DOM tests, build/distribution audit and 33 focused tests against the exact
+Validation passes 433 backend tests with required Docker execution, nine actual
+API/DOM tests, build/distribution audit and 103 focused tests against the exact
 current wheel outside the checkout. All 30 installed Python files match the
 source; the installed CLI and doctor pass. The initial installation check chose
 a historical wheel and failed; its result is retained separately from acceptance

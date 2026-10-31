@@ -51,13 +51,13 @@ def test_current_policy_drift_withholds_built_v2_facts_without_rewriting_receipt
     assert not build_capsule(s, s.get('runs', run['id']))['missing']
 
 
-@pytest.mark.parametrize('mismatch', ['agent_id', 'cwd', 'session_id', 'turn_id', 'evidence_ids'])
+@pytest.mark.parametrize('mismatch', ['agent_id', 'cwd', 'session_id', 'turn_id', 'evidence_ids', 'origin'])
 def test_other_invocation_cannot_supply_observed_version_even_from_cached_plan(tmp_path, mismatch):
     s, run, facts = fixture(tmp_path)
     assert evidence_plan(s, run['id'])[0]['observed_version_ids'] == [facts['version_id']]
     invocation = s.list('capability_invocations')[0]
     changed = {'agent_id': 'other-child', 'cwd': str(tmp_path / 'other-project'),
-               'session_id': 'other-session', 'turn_id': 'other-turn', 'evidence_ids': []}
+               'session_id': 'other-session', 'turn_id': 'other-turn', 'evidence_ids': [], 'origin': 'activation_canary'}
     s.put('capability_invocations', {**invocation, mismatch: changed[mismatch]})
     s = Store(s.root)
     plan = evidence_plan(s, run['id'])[0]
