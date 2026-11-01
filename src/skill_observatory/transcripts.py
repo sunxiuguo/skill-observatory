@@ -19,6 +19,7 @@ VERIFIED_DESKTOP_VERSIONS = {"0.164.0-alpha.11.1", "0.165.0-alpha.1.2", "0.166.0
 VERIFIED_EXEC_VERSIONS = {"0.162.1", "0.163.0", "0.164.0", "0.165.0", "0.166.0"}
 VERIFIED_APP_EXEC_VERSIONS = {"0.164.0-alpha.11.1"}
 VERIFIED_DIRECT_CLI_CHILD_VERSIONS = {"0.165.0"}
+VERIFIED_DIRECT_APP_CHILD_VERSIONS = {"0.166.0-alpha.5.1"}
 CHILD_TERMINAL_EVENTS = {"SubagentStart", "SubagentStop"}
 
 
@@ -63,11 +64,12 @@ def _read_meta(store, path, source):
     if version in {"0.160.0", "0.160.1", "0.162.0-alpha.2"}:
         # These verified shapes use id as the transcript/session identity.
         pass
-    elif version in VERIFIED_DIRECT_CLI_CHILD_VERSIONS and source == 'codex-subagent':
+    elif version in VERIFIED_DIRECT_CLI_CHILD_VERSIONS | VERIFIED_DIRECT_APP_CHILD_VERSIONS and source == 'codex-subagent':
         child_source = meta.get('source')
         subagent = child_source.get('subagent') if isinstance(child_source, dict) else None
         spawn = subagent.get('thread_spawn') if isinstance(subagent, dict) else None
-        if (meta.get('originator') != 'codex_exec' or meta.get('thread_source') != 'subagent'
+        originator = DESKTOP_APP_ORIGINATOR if version in VERIFIED_DIRECT_APP_CHILD_VERSIONS else 'codex_exec'
+        if (meta.get('originator') != originator or meta.get('thread_source') != 'subagent'
                 or not isinstance(spawn, dict) or type(spawn.get('depth')) is not int
                 or spawn['depth'] != 1 or not isinstance(spawn.get('parent_thread_id'), str)
                 or not spawn['parent_thread_id']):
@@ -92,7 +94,7 @@ def _read_meta(store, path, source):
         cli = meta.get('originator') == 'codex_exec'
         spawned = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
         # Separately verified exec shapes use the strict gate above.
-        # Desktop evidence alone does not certify native children.
+        # Other App child shapes remain unverified; exact direct children use the gate above.
         if version in VERIFIED_DESKTOP_VERSIONS and (
                 source != 'codex-desktop' or not desktop or meta.get('source') != 'vscode'):
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')

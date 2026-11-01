@@ -1,3 +1,45 @@
+# Exact App child observation — 2026-11-01
+
+A real `0.166.0-alpha.5.1` App direct-child source was refused by the
+existing adapter. Its metadata and its parent's actual native spawn receipt
+establish the exact transport and child identity. The adapter now admits that
+single direct-child shape through the existing strict CLI-child identity gate,
+with the App originator required. Nested children, alternate origins, mismatched
+parents, malformed depth and unknown versions remain refused.
+
+The new App case fails before the repair while the existing CLI control passes.
+After repair, 31 transcript regressions pass. The actual unchanged source reaches
+its captured EOF with 52 events in an isolated ledger; reopening adds zero events
+and preserves child, parent, root and actor identity. The original worker remains
+interrupted without a completed review artifact. Observation recovery does not
+convert that task into accepted independent evidence.
+
+Two batches account for 24 conversation obligations: 14 sources receive bounded
+selected goal/terminal/tool inspection, nine exact sources are unavailable and
+one retains an index/source cwd mismatch. No oversized-record gap occurs in these
+selected sources. Full-window, comprehensive manual and natural-task coverage
+remain unknown. Current source changes retain immediate follow-up. Historical
+memory-path failure, current partial recovery/review work and actual App-menu
+acceptance remain with their original owners; no external operation is replayed.
+
+The current ledger has eight factual capsules: three remain consumable and five
+retain source-manifest drift refusals. Two version-bound pending tasks still lack
+their exact original/archive sources. There are 28 reviews and 722 production
+review attempts, with no candidate, experiment, installation or independent task
+receipt. Existing semantic qualification and all-attempt cost gates remain;
+no exposed or consumed attempt is reused. The installed immutable runtime has
+not been upgraded and still lacks newer source repairs.
+
+Validation passes 434 backend tests with required Docker, 46 focused contract
+and transcript checks, nine actual API/DOM tests, archive audit and 31 transcript
+checks against the exact wheel outside the checkout. All 30 installed Python
+files match current source and the installed CLI doctor passes. The initial full
+run failed two contract checks after a regression test entrypoint was renamed;
+its original entrypoint was restored before the passing run. Failed harness and
+review attempts remain in private evidence. Final Git/remote/CI identities are
+read back at delivery. Skill gain stays HOLD, natural gain UNKNOWN and recursive
+method gain UNVERIFIED.
+
 # Exact ingress and origin-bound factual reads — 2026-10-31
 
 Independent public-source review reproduced a separate attribution defect:
