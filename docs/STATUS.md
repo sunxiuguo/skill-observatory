@@ -14,9 +14,10 @@ and preserves child, parent, root and actor identity. The original worker remain
 interrupted without a completed review artifact. Observation recovery does not
 convert that task into accepted independent evidence.
 
-Two batches account for 24 conversation obligations: 14 sources receive bounded
-selected goal/terminal/tool inspection, nine exact sources are unavailable and
-one retains an index/source cwd mismatch. No oversized-record gap occurs in these
+Three batches account for 36 conversation obligations across 35 distinct sessions:
+23 source views (22 distinct sources) receive bounded selected goal/terminal/tool
+inspection, 12 exact sources are unavailable and one retains an index/source cwd
+mismatch. No oversized-record gap occurs in these
 selected sources. Full-window, comprehensive manual and natural-task coverage
 remain unknown. Current source changes retain immediate follow-up. Historical
 memory-path failure, current partial recovery/review work and actual App-menu
@@ -29,6 +30,15 @@ review attempts, with no candidate, experiment, installation or independent task
 receipt. Existing semantic qualification and all-attempt cost gates remain;
 no exposed or consumed attempt is reused. The installed immutable runtime has
 not been upgraded and still lacks newer source repairs.
+
+A configured independent engineering reviewer performed actual public-source
+reads but returned no completed reproduction or final artifact after a bounded
+correction. It was closed as partial, with its costs retained. The root checked
+the identified accounting boundaries and 14 relevant refusal/recovery cases pass;
+no independent review success or second source defect is inferred. One reused
+private projection path was overwritten during a fresh source review; the earlier
+35-record source prefix still matches its frozen SHA-256, while the original
+projection-file bytes remain unavailable. Subsequent batch views are separate.
 
 Validation passes 434 backend tests with required Docker, 46 focused contract
 and transcript checks, nine actual API/DOM tests, archive audit and 31 transcript
