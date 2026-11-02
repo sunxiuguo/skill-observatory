@@ -1,3 +1,41 @@
+# Historical App child observation — 2026-11-02
+
+The exact `0.164.0-alpha.11.1` App direct-child shape is now admitted through
+its existing strict identity gate. Real child metadata and its parent's native
+spawn receipt bind the transport, logical parent and execution identity. A new
+case fails before repair while the CLI and newer App controls pass. All 32
+transcript regressions pass after repair; malformed identities, alternate
+origins, nested children and unverified versions remain refused.
+
+The unchanged real source reaches captured EOF in three passes with 38 events.
+Reopening produces zero duplicates and preserves child, parent, root and actor
+identity. Selected body readback recovers the historical engineering review;
+its original limited scope is retained, without independent domain acceptance.
+The original refused projection remains separate from the repaired source view.
+
+Three bounded batches account for 36 conversation obligations. Including the
+recovered child, 23 sources receive selected goal/terminal/tool inspection;
+12 exact sources remain unavailable and one retains an index/source cwd
+mismatch. Selected views have no oversized-record gaps. More sources remain;
+comprehensive window and natural-origin denominators remain unknown. Current
+recovery, unfinished interviews and device/player acceptance stay with their
+original owners. No uncertain external operation is replayed.
+
+All three installed worker lanes are progressing. Eight factual capsules retain
+three consumable and five manifest-drift results; 28 reviews and 722 production
+review attempts have produced no candidate, experiment, installation or
+independent task receipt. Two version-bound factual sources remain absent.
+Existing semantic qualification and all-attempt cost gates stay unchanged.
+The immutable service has not been upgraded to the newer source repairs.
+
+Validation passes 435 backend tests with required Docker, nine actual API/DOM
+tests, contract/archive checks and 32 transcript tests against a clean wheel
+outside the checkout. All 30 installed Python files match the source; CLI doctor
+passes. The first transcript run retained a valid refusal but failed its old
+expected error stage; that expectation was corrected without removing the case.
+Final source/remote/CI identities are read back at delivery. Skill gain remains
+HOLD, natural gain UNKNOWN and recursive-method gain UNVERIFIED.
+
 # Exact App child observation — 2026-11-01
 
 A real `0.166.0-alpha.5.1` App direct-child source was refused by the

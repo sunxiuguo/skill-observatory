@@ -118,7 +118,7 @@ def test_exact_desktop_observation_restart_and_unverified_surfaces(tmp_path,vers
   ({'session_id':'other'},'codex-desktop','SCHEMA_UNVERIFIED'),
   ({'originator':'codex_exec','source':'vscode'},'codex-cli','SOURCE_SCHEMA_UNVERIFIED'),
   ({'source':'cli'},'codex-desktop','SOURCE_SCHEMA_UNVERIFIED'),
-  ({'thread_source':'subagent','source':{'subagent':{'thread_spawn':{'parent_thread_id':'parent','depth':1}}}},'codex-subagent','SCHEMA_UNVERIFIED' if version=='0.166.0-alpha.5.1' else 'SOURCE_SCHEMA_UNVERIFIED'),
+  ({'thread_source':'subagent','source':{'subagent':{'thread_spawn':{'parent_thread_id':'parent','depth':1}}}},'codex-subagent','SCHEMA_UNVERIFIED' if version in {'0.164.0-alpha.11.1','0.166.0-alpha.5.1'} else 'SOURCE_SCHEMA_UNVERIFIED'),
   ({'session_id':None},'codex-desktop','SCHEMA_UNVERIFIED')]:
   p.write_text(json.dumps({'type':'session_meta','payload':{**m,**patch}})+'\n')
   with pytest.raises(ValueError,match=reason):observe_session(restarted,p,'parent',source)
@@ -166,7 +166,7 @@ def test_child_hook_transcript_read_is_one_logical_invocation(tmp_path,version):
  assert 'verified_read' in s.list('capability_invocations')[0]['stages']
 
 
-@pytest.mark.parametrize('version,originator',[('0.165.0','codex_exec'),('0.166.0-alpha.5.1','Codex Desktop')])
+@pytest.mark.parametrize('version,originator',[('0.165.0','codex_exec'),('0.164.0-alpha.11.1','Codex Desktop'),('0.166.0-alpha.5.1','Codex Desktop')])
 def test_165_cli_child_exact_identity_read_restart_and_refusals(tmp_path,version,originator):
  s,p,m=setup(tmp_path,version,child=True);m['originator']=originator
  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
