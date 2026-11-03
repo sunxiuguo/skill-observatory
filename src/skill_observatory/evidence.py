@@ -287,9 +287,13 @@ def _plan_runs(store,runs,db,*,explicit):
 
 def build_selected_evidence(store, selection):
     """Thin trusted Native selection ingress, sharing attach_evidence safety/CAS."""
-    allowed={'run_id','goal','success_criteria','owner','version_id','result','steps','receipt_sha256','artifact_refs','attempt_refs','environment_binding'}
+    allowed={'run_id','goal','success_criteria','owner','version_id','result','steps','receipt_sha256','source_fingerprint','artifact_refs','attempt_refs','environment_binding'}
     if not isinstance(selection,dict) or set(selection)-allowed or not allowed-{'artifact_refs','attempt_refs','environment_binding'}<=set(selection):raise ValueError('EVIDENCE_SELECTION_INVALID')
     plan=evidence_plan(store,selection['run_id'])[0]
+    # The selector must name the source it actually reviewed. Replanning must
+    # not silently attach old facts to a changed event manifest or policy.
+    if selection['source_fingerprint']!=plan['source_fingerprint']:
+        raise ValueError('EVIDENCE_SELECTION_SOURCE_DRIFT')
     version=store.get('capability_versions',selection['version_id'])
     if not version:raise ValueError('EVIDENCE_OWNER_VERSION_MISMATCH')
     value={**selection,'schema_version':2,**{k:plan[k] for k in ('run_binding','actual_terminal','source_class','coverage','source_fingerprint','policy_digest','builder_version')},

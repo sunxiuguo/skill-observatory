@@ -1,8 +1,12 @@
 """Versioned local facts: no synthetic goals, natural origin or invented success."""
 import json
 import pytest
-from test_evidence_recovery import fixture
+from test_evidence_recovery import fixture as recovery_fixture
 from skill_observatory.evidence import build_selected_evidence,evidence_plan,build_capsule
+
+
+def fixture(tmp_path, owner='owner'):
+    return recovery_fixture(tmp_path, owner=owner, versioned=True)
 
 
 @pytest.mark.parametrize('owner', ['Project skills owner', '团队 Skill owner'])
@@ -84,6 +88,9 @@ def test_changed_policy_retires_old_pending_work_without_losing_evidence(tmp_pat
     s,run,facts=fixture(tmp_path)
     old=evidence_plan(s,run['id'])[0]
     s.settings({'diagnostic_scopes':[str(tmp_path)]})
+    with pytest.raises(ValueError,match='EVIDENCE_SELECTION_SOURCE_DRIFT'):
+        build_selected_evidence(s,facts)
+    facts={**facts,'source_fingerprint':evidence_plan(s,run['id'])[0]['source_fingerprint']}
     built=build_selected_evidence(s,facts)
     current=evidence_plan(s,run['id'])[0]
     assert current['id']!=old['id'] and current['status']=='built'
@@ -130,6 +137,7 @@ def test_returned_pending_policy_is_visible_ahead_of_historical_build(tmp_path):
     s,run,facts=fixture(tmp_path)
     old=evidence_plan(s,run['id'])[0]
     s.settings({'diagnostic_scopes':[str(tmp_path)]})
+    facts={**facts,'source_fingerprint':evidence_plan(s,run['id'])[0]['source_fingerprint']}
     build_selected_evidence(s,facts)
     s.settings({'diagnostic_scopes':[]})
     evidence_plan(s,run['id'])
@@ -159,7 +167,8 @@ def test_historical_build_cannot_return_another_policy_capsule(tmp_path):
     s,run,facts=fixture(tmp_path)
     first=build_selected_evidence(s,facts)
     s.settings({'diagnostic_scopes':[str(tmp_path)]})
-    second=build_selected_evidence(s,facts)
+    second_facts={**facts,'source_fingerprint':evidence_plan(s,run['id'])[0]['source_fingerprint']}
+    second=build_selected_evidence(s,second_facts)
     assert first['capsule_sha256']!=second['capsule_sha256']
     s.settings({'diagnostic_scopes':[]})
     with pytest.raises(ValueError,match='EVIDENCE_BUILD_READBACK_REQUIRED'):
@@ -209,3 +218,53 @@ def test_self_review_fills_action_limit_from_the_available_lane(tmp_path,version
             'status':'awaiting_native_selection','missing':['TASK_GOAL_REQUIRED'],
             'observed_version_ids':versions,'created_at':'2026-10-10'})
     assert [r['id'] for r in evidence_actions(s)]==['0','1','2','3']
+
+
+@pytest.mark.parametrize('drift', ['source', 'policy'])
+@pytest.mark.parametrize('already_built', [False, True])
+def test_selected_facts_cannot_rebind_to_changed_source_after_restart(tmp_path, drift, already_built):
+    from skill_observatory.runtime import spool, ingest
+    from skill_observatory.store import Store
+    s, run, facts = fixture(tmp_path)
+    old_plan = evidence_plan(s, run['id'])[0]
+    original = build_selected_evidence(s, facts) if already_built else None
+    if drift == 'source':
+        spool(s, dict(hook_event_name='Interrupt', session_id='s', turn_id='t', cwd=str(tmp_path)))
+        ingest(s)
+    else:
+        s.settings({'diagnostic_scopes': [str(tmp_path)]})
+    s = Store(s.root)
+    jobs, attempts = s.jobs(), s.list('review_attempts')
+    with pytest.raises(ValueError, match='EVIDENCE_SELECTION_SOURCE_DRIFT'):
+        build_selected_evidence(s, facts)
+    current = evidence_plan(s, run['id'])[0]
+    assert current['source_fingerprint'] != facts['source_fingerprint']
+    assert current['status'] == 'awaiting_native_selection' and not current.get('selection_sha256')
+    assert s.get('run_evidence', run['id']) == original
+    if already_built:
+        assert s.get('evidence_builds', old_plan['id'])['selection_sha256']
+        assert build_capsule(s, s.get('runs', run['id']))['facts'] is None
+    assert s.jobs() == jobs and s.list('review_attempts') == attempts
+    if drift == 'source':
+        assert current['actual_terminal']['event'] == 'Interrupt'
+        # A newly reviewed selection may describe the new terminal, retaining
+        # the previous receipt and attempts rather than replaying either.
+        fresh = {**facts, 'source_fingerprint': current['source_fingerprint'],
+                 'result': {'status': 'interrupted'},
+                 'steps': [{'event_id': current['actual_terminal']['event_id'],
+                            'fact': 'The source records an interrupted turn.'}]}
+        accepted = build_selected_evidence(s, fresh)
+        capsule = build_capsule(s, s.get('runs', run['id']))
+        assert not capsule['missing'] and capsule['facts']['result']['status'] == 'interrupted'
+        assert build_selected_evidence(Store(s.root), fresh) == accepted
+        if original:assert s.read_artifact(original['capsule_sha256'])
+        assert s.list('review_attempts') == attempts
+
+
+def test_builder_requires_explicit_reviewed_source_fingerprint(tmp_path):
+    s, run, facts = fixture(tmp_path)
+    facts.pop('source_fingerprint')
+    with pytest.raises(ValueError, match='EVIDENCE_SELECTION_INVALID'):
+        build_selected_evidence(s, facts)
+    assert s.get('run_evidence', run['id']) is None
+    assert s.jobs()[0]['status'] == 'hold' and not s.list('review_attempts')

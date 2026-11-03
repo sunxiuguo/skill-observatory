@@ -29,8 +29,11 @@ skillobs --state PRIVATE_STATE evidence-build PRIVATE_SELECTION_JSON
 ```
 
 The selection contains run_id, goal, success_criteria, owner, observed version_id,
-result, steps (`event_id`, `fact`) and receipt_sha256. Optional artifact_refs and
-attempt_refs use content digests. Unknown environment remains explicit. The v2
+result, steps (`event_id`, `fact`), receipt_sha256 and the source_fingerprint from
+the reviewed plan. A changed source or policy rejects the old selection with
+`EVIDENCE_SELECTION_SOURCE_DRIFT`; review the new plan and prepare a new selection.
+Do not refresh the fingerprint on an unreviewed old selection. Optional
+artifact_refs and attempt_refs use content digests. Unknown environment remains explicit. The v2
 builder binds the original event manifest, full capability version, source class,
 terminal, gaps, attempts and policy fingerprint. Local references remain private;
 the reviewer must be admitted for the actual capsule schema. No-change makes no

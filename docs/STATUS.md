@@ -1,3 +1,45 @@
+# Reviewed source selection — 2026-11-03
+
+An independent engineering check reproduced a factual-binding defect: after a
+run acquired a new terminal event, resubmitting the old selection silently bound
+its old conclusion to the new source. The builder now requires the reviewed
+plan's `source_fingerprint` and rejects source or policy drift before attaching
+facts. A new review can select the changed source explicitly. Same-source retries
+remain idempotent; old receipts, attempts and consumption gates are preserved.
+The legacy factual-import contract remains unchanged.
+
+The original implementation accepts a stale completed conclusion after an
+Interrupt. Removing the new guard makes four drift regressions fail while two
+same-source controls pass. The repair passes 70 factual checks and 440 backend
+tests with required Docker execution. Nine actual API/DOM tests, contract and
+distribution checks pass. A clean wheel's actual CLI accepts the initial build
+and duplicate, refuses the changed source without replacing its receipt, and
+passes doctor. Installed package bytes match the reviewed wheel and source.
+
+Three bounded batches account for 36 conversation obligations across 31 distinct
+sessions. Twenty-three selected source views cover 18 distinct sessions; each
+captured prefix is rechecked against its frozen EOF and hash. Twelve exact sources
+are missing and one retains an index/source cwd mismatch. The selected views
+retain 272 distinct oversized-record gaps. Earlier auxiliary tool extracts could
+include appended lines; those records are retained separately from the corrected
+snapshot-bound readback. Full-window and natural-origin coverage remain unknown.
+Current provider continuation recovery, chapter review and device/player
+acceptance stay with their original owners; no uncertain operation is replayed.
+
+The worker lanes continue progressing. Eight factual capsules retain three
+consumable and five manifest-drift results. Twenty-eight reviews and 722
+production review attempts have produced no candidate, experiment, installation
+or independent task receipt. Four selected factual-input sources, including two
+with observed versions, remain absent at their exact indexed/archive filenames.
+The existing semantic qualification and all-attempt cost gates remain unchanged.
+The installed immutable service has not been upgraded to the newer source fixes.
+
+The native scheduler records this run in progress and the prior two runs
+automatically archived; current post-final archival is not yet verifiable.
+The configured next run is retained. Final source/remote/CI identities are read
+back at delivery. This is an engineering repair: Skill gain remains HOLD,
+natural gain UNKNOWN and recursive-method gain UNVERIFIED.
+
 # Historical App child observation — 2026-11-02
 
 The exact `0.164.0-alpha.11.1` App direct-child shape is now admitted through

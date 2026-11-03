@@ -14,7 +14,7 @@ from skill_observatory.store import Store, canonical
 
 @pytest.mark.parametrize('versioned', [False, True])
 def test_revoked_scope_blocks_built_facts_before_admission_and_preserves_history(tmp_path, versioned):
-    s, run, facts = fixture(tmp_path)
+    s, run, facts = fixture(tmp_path, versioned=versioned)
     build = build_selected_evidence if versioned else attach_evidence
     receipt = build(s, facts)
     current = s.get('runs', run['id'])
@@ -41,7 +41,7 @@ def test_revoked_scope_blocks_built_facts_before_admission_and_preserves_history
 
 
 def test_current_policy_drift_withholds_built_v2_facts_without_rewriting_receipt(tmp_path):
-    s, run, facts = fixture(tmp_path)
+    s, run, facts = fixture(tmp_path, versioned=True)
     receipt = build_selected_evidence(s, facts)
     s.settings({'diagnostic_scopes': [str(tmp_path)]})
     capsule = build_capsule(Store(s.root), s.get('runs', run['id']))
@@ -53,7 +53,7 @@ def test_current_policy_drift_withholds_built_v2_facts_without_rewriting_receipt
 
 @pytest.mark.parametrize('mismatch', ['agent_id', 'cwd', 'session_id', 'turn_id', 'evidence_ids', 'origin'])
 def test_other_invocation_cannot_supply_observed_version_even_from_cached_plan(tmp_path, mismatch):
-    s, run, facts = fixture(tmp_path)
+    s, run, facts = fixture(tmp_path, versioned=True)
     assert evidence_plan(s, run['id'])[0]['observed_version_ids'] == [facts['version_id']]
     invocation = s.list('capability_invocations')[0]
     changed = {'agent_id': 'other-child', 'cwd': str(tmp_path / 'other-project'),
@@ -76,7 +76,7 @@ def test_other_invocation_cannot_supply_observed_version_even_from_cached_plan(t
 
 @pytest.mark.parametrize('versioned', [False, True])
 def test_legacy_built_cross_actor_facts_are_withheld_at_consume(tmp_path, versioned):
-    s, run, facts = fixture(tmp_path)
+    s, run, facts = fixture(tmp_path, versioned=versioned)
     receipt = (build_selected_evidence if versioned else attach_evidence)(s, facts)
     invocation = s.list('capability_invocations')[0]
     s.put('capability_invocations', {**invocation, 'agent_id': 'other-child'})
@@ -88,7 +88,7 @@ def test_legacy_built_cross_actor_facts_are_withheld_at_consume(tmp_path, versio
 
 @pytest.mark.parametrize('revoke_at', ['admission', 'thread_start'])
 def test_scope_revoked_during_setup_never_reaches_model_turn(tmp_path, revoke_at):
-    s, run, facts = fixture(tmp_path)
+    s, run, facts = fixture(tmp_path, versioned=True)
     build_selected_evidence(s, facts)
     calls = []
 
@@ -118,7 +118,7 @@ def test_scope_revoked_during_setup_never_reaches_model_turn(tmp_path, revoke_at
 
 
 def late_case(tmp_path, versioned=True):
-    s, run, facts = fixture(tmp_path)
+    s, run, facts = fixture(tmp_path, versioned=versioned)
     (build_selected_evidence if versioned else attach_evidence)(s, facts)
     run = s.get('runs', run['id'])
     attempt = {'id': 'late', 'run_id': run['id'], 'admission_sha256': 'synthetic',

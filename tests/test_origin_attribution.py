@@ -12,7 +12,7 @@ from skill_observatory.store import Store
 @pytest.mark.parametrize('versioned', [False, True])
 def test_legacy_merged_read_requires_same_origin_observation(tmp_path, versioned):
     from skill_observatory.evidence import attach_evidence
-    s, run, facts = fixture(tmp_path)
+    s, run, facts = fixture(tmp_path, versioned=versioned)
     receipt = (build_selected_evidence if versioned else attach_evidence)(s, facts)
     observation = s.list('capability_observations')[0]
     # Reproduce historical merging: the aggregate still says user_run while
@@ -47,7 +47,9 @@ def test_factual_build_and_attribution_require_matching_origins(tmp_path, run_or
                         session_id='other', turn_id='t', invocation_id='read', stage='verified_read',
                         source='fixture', event_id='other-read', evidence_sha256=facts['receipt_sha256'], origin=use_origin))
     selected = {**facts, 'run_id': run['id'], 'steps': [{'event_id': run['event_ids'][0], 'fact': 'Terminal observed.'}]}
-    observed = evidence_plan(s, run['id'])[0]['observed_version_ids']
+    plan = evidence_plan(s, run['id'])[0]
+    selected['source_fingerprint'] = plan['source_fingerprint']
+    observed = plan['observed_version_ids']
     if run_origin == use_origin:
         assert observed == [facts['version_id']]
         build_selected_evidence(s, selected)

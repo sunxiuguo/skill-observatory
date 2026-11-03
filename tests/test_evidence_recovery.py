@@ -7,7 +7,7 @@ from skill_observatory.evidence import attach_evidence,build_capsule,diagnostic_
 from skill_observatory.reviewer import CodexReviewer
 
 
-def fixture(tmp_path, owner='owner'):
+def fixture(tmp_path, owner='owner', versioned=False):
     s=Store(tmp_path/'state');s.settings({'scopes':[str(tmp_path)]})
     p=tmp_path/'flow';p.mkdir();(p/'SKILL.md').write_text('---\nname: flow\ndescription: scoped proof\n---\nKeep boundaries.')
     register(s,p,owner);cap=s.list('capability_catalog')[0]
@@ -19,6 +19,9 @@ def fixture(tmp_path, owner='owner'):
     process_one(s,reviewer)
     assert s.jobs()[0]['reason_code']=='DIAGNOSTIC_FACTS_REQUIRED'
     facts=dict(run_id=run['id'],goal='Complete the scoped CLI task',success_criteria='Correct arguments and validated result',owner=owner,version_id=cap['version_id'],result={'status':'failed','reason_code':'CLI_ARGUMENT_MISMATCH','exit_code':2},steps=[{'event_id':run['event_ids'][0],'fact':'The tool rejected an unsupported argument and exited with code 2.'}],receipt_sha256=h)
+    if versioned:
+        from skill_observatory.evidence import evidence_plan
+        facts['source_fingerprint']=evidence_plan(s,run['id'])[0]['source_fingerprint']
     return s,run,facts
 
 
