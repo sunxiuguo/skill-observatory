@@ -1,3 +1,46 @@
+# Atomic factual selection and collector recovery — 2026-11-04
+
+A concurrent-build reproduction found that two different factual selections
+could both succeed while the completed build and consumable capsule named
+different selections. Selection ownership, factual binding, safe job reopening
+and the completed build now commit in one SQLite transaction. Concurrent
+different selections refuse the loser; identical selections remain idempotent.
+An injected completion failure rolls back both the receipt and job reopening.
+Before the repair, both refusal/rollback cases fail while the identical-input
+control passes. The repaired factual and attribution suite passes 73 checks.
+
+The installed collector had also stopped after a retired routing dependency
+became unavailable during private owner-module import. The local owner now
+loads that dependency only when required and declares an explicit reviewer
+HOLD while it is absent. The existing immutable service was restarted through
+its lifecycle owner: collection, review scheduling and evolution scheduling
+resume; semantic execution remains blocked. No provider fallback, model call,
+unknown-attempt replay or installed runtime upgrade occurred.
+
+Three bounded batches account for 36 conversation obligations across 35
+sessions. Twenty-two selected source views cover 21 distinct sessions; all
+captured prefixes are rehashed to their frozen EOF. Twelve exact sources are
+absent, one retains an index/source cwd mismatch and one has an unverified
+source schema. The selected views retain 308 distinct oversized-record gaps.
+Full-window and natural-origin coverage remain unknown. Original-owner device,
+player, chapter-page and recovery follow-ups remain open; no other-project
+operation is replayed.
+
+A bounded alternative factual-source lookup finds available transcripts but no
+verified capability versions; inferred attribution is not promoted. Eight
+factual capsules still have three consumable and five source-drift results.
+Twenty-eight reviews and 722 production attempts have produced no candidate,
+experiment, installation or independent task receipt.
+
+Validation covers 443 backend checks: the first run passes 429 and records 14
+container-environment errors; starting the existing container runtime makes all
+14 refused setup cases pass. Nine actual API/DOM checks, contract/build/archive
+checks and clean-wheel actual CLI/doctor pass. The wheel also passes all three
+new concurrency, idempotency and rollback cases outside the checkout. Final
+source/remote/CI identities are read back at delivery. Skill gain remains HOLD,
+natural outcomes UNKNOWN and method gain UNVERIFIED. New source repairs are
+not claimed to be active in the older immutable service.
+
 # Reviewed source selection — 2026-11-03
 
 An independent engineering check reproduced a factual-binding defect: after a

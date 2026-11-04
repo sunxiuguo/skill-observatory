@@ -268,3 +268,65 @@ def test_builder_requires_explicit_reviewed_source_fingerprint(tmp_path):
         build_selected_evidence(s, facts)
     assert s.get('run_evidence', run['id']) is None
     assert s.jobs()[0]['status'] == 'hold' and not s.list('review_attempts')
+
+
+@pytest.mark.parametrize('same_selection', [False, True])
+def test_concurrent_selections_commit_one_consistent_receipt(tmp_path, monkeypatch, same_selection):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    from skill_observatory import evidence
+    from skill_observatory.store import Store
+    s, run, facts = fixture(tmp_path)
+    barrier = threading.Barrier(2)
+    original_plan = evidence.evidence_plan
+
+    def concurrent_plan(*args, **kwargs):
+        planned = original_plan(*args, **kwargs)
+        barrier.wait(timeout=10)
+        return planned
+
+    monkeypatch.setattr(evidence, 'evidence_plan', concurrent_plan)
+    choices = [facts, facts if same_selection else {**facts, 'goal': 'A different reviewed goal'}]
+
+    def submit(choice):
+        try:return build_selected_evidence(Store(s.root), choice)
+        except ValueError as error:return str(error)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(submit, choices))
+    accepted = [r for r in results if isinstance(r, dict)]
+    refused = [r for r in results if isinstance(r, str)]
+    assert len(accepted) == (2 if same_selection else 1)
+    assert refused == ([] if same_selection else ['EVIDENCE_BUILD_ALREADY_SELECTED'])
+    current = Store(s.root)
+    plan = original_plan(current, run['id'])[0]
+    receipt = current.get('run_evidence', run['id'])
+    assert plan['status'] == 'built' and plan['selection_sha256'] == receipt['capsule_sha256']
+    assert all(r == receipt for r in accepted)
+    capsule = build_capsule(current, current.get('runs', run['id']))
+    assert not capsule['missing'] and capsule['facts']['goal'] in [c['goal'] for c in choices]
+    assert current.jobs()[0]['status'] == 'queued' and not current.list('review_attempts')
+
+
+def test_build_commit_failure_does_not_attach_or_resume_jobs(tmp_path, monkeypatch):
+    from skill_observatory.store import Store
+    s, run, facts = fixture(tmp_path)
+    before, jobs = evidence_plan(s, run['id'])[0], s.jobs()
+    original_put = Store.put
+
+    def fail_build(store, kind, value, db=None):
+        if kind == 'evidence_builds' and value.get('status') == 'built':
+            raise OSError('injected build commit failure')
+        return original_put(store, kind, value, db)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Store, 'put', fail_build)
+        with pytest.raises(OSError, match='injected build commit failure'):
+            build_selected_evidence(s, facts)
+    current = Store(s.root)
+    assert current.get('run_evidence', run['id']) is None
+    assert evidence_plan(current, run['id'])[0] == before and current.jobs() == jobs
+    assert not current.list('review_attempts')
+    receipt = build_selected_evidence(current, facts)
+    assert receipt['resumed_pre_dispatch_jobs'] == 1
+    assert build_selected_evidence(Store(s.root), facts) == receipt

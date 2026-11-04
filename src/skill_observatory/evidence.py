@@ -44,7 +44,7 @@ def diagnostic_from_output(output):
     return {'status':'failed','exit_code':failed,'reason_code':reason}
 
 
-def attach_evidence(store, value):
+def attach_evidence(store, value, *, db=None):
     """Trusted local ingress, absent from HTTP; only redacted selected facts."""
     from .runtime import redact
     required={'run_id','goal','success_criteria','owner','version_id','result','steps','receipt_sha256'}
@@ -85,26 +85,31 @@ def attach_evidence(store, value):
     store.read_artifact(value['receipt_sha256'])
     h=store.artifact(canonical(value))
     manifest=digest(canonical(run))
-    with store.connect() as db:
-        db.execute('BEGIN IMMEDIATE')
-        current=store.get('runs',run['id'],db)
-        if digest(canonical(current))!=manifest:raise ValueError('EVIDENCE_CAPSULE_RUN_DRIFT')
-        _current_scope(store,current)
-        if value['version_id'] not in _observed_versions(store,current,db):raise ValueError('EVIDENCE_VERSION_NOT_OBSERVED')
-        from .capabilities import bind_run_attributions
-        current=bind_run_attributions(store,current,db,version_id=value['version_id'])
-        manifest=digest(canonical(current))
-        old=store.get('run_evidence',run['id'],db)
-        if old and old.get('capsule_sha256')==h and old.get('run_manifest_sha256')==manifest:return old
-        # Only a known pre-dispatch evidence wait can reopen. Missing admission
-        # metadata on an otherwise ambiguous legacy attempt is not proof of safety.
-        attempts=[__import__('json').loads(r[0]) for r in db.execute("SELECT data FROM entities WHERE kind='review_attempts' AND json_extract(data,'$.run_id')=?",(run['id'],))]
-        safe=not any(a.get('admission_sha256') or a.get('status') not in {'hold','deferred'}
-            or a.get('reason_code') not in {'DIAGNOSTIC_FACTS_REQUIRED','EVIDENCE_CAPSULE_RUN_DRIFT','DAILY_REVIEW_ATTEMPT_BUDGET_HOLD'} for a in attempts)
-        resumed=0
-        if safe:
-            resumed=db.execute("UPDATE jobs SET status='queued',reason_code=NULL,eligible_at=0,lease_until=0 WHERE run_id=? AND status='hold' AND reason_code IN ('DIAGNOSTIC_FACTS_REQUIRED','EVIDENCE_CAPSULE_RUN_DRIFT')",(run['id'],)).rowcount
-        return store.put('run_evidence',{'id':value['run_id'],'capsule_sha256':h,'run_manifest_sha256':manifest,'resumed_pre_dispatch_jobs':resumed},db)
+    if db is not None:return _commit_evidence(store,value,run,h,manifest,db)
+    with store.connect() as connection:
+        connection.execute('BEGIN IMMEDIATE')
+        return _commit_evidence(store,value,run,h,manifest,connection)
+
+
+def _commit_evidence(store,value,run,h,manifest,db):
+    current=store.get('runs',run['id'],db)
+    if digest(canonical(current))!=manifest:raise ValueError('EVIDENCE_CAPSULE_RUN_DRIFT')
+    _current_scope(store,current)
+    if value['version_id'] not in _observed_versions(store,current,db):raise ValueError('EVIDENCE_VERSION_NOT_OBSERVED')
+    from .capabilities import bind_run_attributions
+    current=bind_run_attributions(store,current,db,version_id=value['version_id'])
+    manifest=digest(canonical(current))
+    old=store.get('run_evidence',run['id'],db)
+    if old and old.get('capsule_sha256')==h and old.get('run_manifest_sha256')==manifest:return old
+    # Only a known pre-dispatch evidence wait can reopen. Missing admission
+    # metadata on an otherwise ambiguous legacy attempt is not proof of safety.
+    attempts=[__import__('json').loads(r[0]) for r in db.execute("SELECT data FROM entities WHERE kind='review_attempts' AND json_extract(data,'$.run_id')=?",(run['id'],))]
+    safe=not any(a.get('admission_sha256') or a.get('status') not in {'hold','deferred'}
+        or a.get('reason_code') not in {'DIAGNOSTIC_FACTS_REQUIRED','EVIDENCE_CAPSULE_RUN_DRIFT','DAILY_REVIEW_ATTEMPT_BUDGET_HOLD'} for a in attempts)
+    resumed=0
+    if safe:
+        resumed=db.execute("UPDATE jobs SET status='queued',reason_code=NULL,eligible_at=0,lease_until=0 WHERE run_id=? AND status='hold' AND reason_code IN ('DIAGNOSTIC_FACTS_REQUIRED','EVIDENCE_CAPSULE_RUN_DRIFT')",(run['id'],)).rowcount
+    return store.put('run_evidence',{'id':value['run_id'],'capsule_sha256':h,'run_manifest_sha256':manifest,'resumed_pre_dispatch_jobs':resumed},db)
 
 
 def build_capsule(store,run):
@@ -301,10 +306,13 @@ def build_selected_evidence(store, selection):
            'environment_binding':selection.get('environment_binding',{'model':None,'effort':None,'runtime':None,'harness':None,'evidence_sha256':None,'missing':['ENVIRONMENT_NOT_OBSERVED']}),
            'local_refs':[{'sha256':plan['source_event_manifest_sha256'],'kind':'event_manifest'}]}
     h=store.artifact(canonical(value))
-    if plan.get('selection_sha256'):
-        if plan['selection_sha256']!=h:raise ValueError('EVIDENCE_BUILD_ALREADY_SELECTED')
-        with store.connect() as db:
-            db.execute('BEGIN')
+    with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        # Selection ownership and its receipt commit together. A caller's
+        # pre-lock plan cannot overwrite another selector's completed choice.
+        plan=store.get('evidence_builds',plan['id'],db)
+        if plan.get('selection_sha256'):
+            if plan['selection_sha256']!=h:raise ValueError('EVIDENCE_BUILD_ALREADY_SELECTED')
             receipt=store.get('run_evidence',selection['run_id'],db)
             current=store.get('runs',selection['run_id'],db)
             _current_scope(store,current)
@@ -312,7 +320,7 @@ def build_selected_evidence(store, selection):
             if not receipt or receipt.get('capsule_sha256')!=h or receipt.get('run_manifest_sha256')!=digest(canonical(current)):
                 raise ValueError('EVIDENCE_BUILD_READBACK_REQUIRED')
             return receipt
-    receipt=attach_evidence(store,value)
-    plan.update(status='built',missing=[],selection_sha256=h,completed_at=now())
-    store.put('evidence_builds',plan)
-    return receipt
+        receipt=attach_evidence(store,value,db=db)
+        plan.update(status='built',missing=[],selection_sha256=h,completed_at=now())
+        store.put('evidence_builds',plan,db)
+        return receipt
