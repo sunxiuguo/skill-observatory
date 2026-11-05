@@ -91,11 +91,26 @@ def attach_evidence(store, value, *, db=None):
         return _commit_evidence(store,value,run,h,manifest,connection)
 
 
+def _selected_hashes(store,run,db=None):
+    """All ingress shares the selection for this exact source and policy."""
+    if db is None:
+        with store.connect() as connection:return _selected_hashes(store,run,connection)
+    rows=db.execute("SELECT data FROM entities WHERE kind='evidence_builds' "
+        "AND json_extract(data,'$.run_id')=? AND json_extract(data,'$.selection_sha256') IS NOT NULL",
+        (run['id'],)).fetchall()
+    if not rows:return set()
+    source=project_run_evidence(store,run)['source_fingerprint']
+    return {row['selection_sha256'] for raw in rows for row in [json.loads(raw[0])]
+            if row['source_fingerprint']==source}
+
+
 def _commit_evidence(store,value,run,h,manifest,db):
     current=store.get('runs',run['id'],db)
     if digest(canonical(current))!=manifest:raise ValueError('EVIDENCE_CAPSULE_RUN_DRIFT')
     _current_scope(store,current)
     if value['version_id'] not in _observed_versions(store,current,db):raise ValueError('EVIDENCE_VERSION_NOT_OBSERVED')
+    if any(selected!=h for selected in _selected_hashes(store,current,db)):
+        raise ValueError('EVIDENCE_BUILD_ALREADY_SELECTED')
     from .capabilities import bind_run_attributions
     current=bind_run_attributions(store,current,db,version_id=value['version_id'])
     manifest=digest(canonical(current))
@@ -126,6 +141,8 @@ def build_capsule(store,run):
             try:
                 if facts['version_id'] not in _observed_versions(store,run):raise ValueError('EVIDENCE_VERSION_NOT_OBSERVED')
                 if facts.get('schema_version')==2:_validate_v2(store,run,facts)
+                if any(selected!=attached['capsule_sha256'] for selected in _selected_hashes(store,run)):
+                    raise ValueError('EVIDENCE_BUILD_READBACK_REQUIRED')
             except ValueError as error:
                 missing.append(str(error));facts=None
     if facts is None:missing.append('DIAGNOSTIC_FACTS_REQUIRED')

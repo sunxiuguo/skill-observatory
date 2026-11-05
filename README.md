@@ -73,15 +73,15 @@ uv run skillobs observe-session /absolute/selected-session.jsonl \
 The versioned transcript adapter supports certified 0.160.0/0.160.1 and
 0.162.0-alpha.2 fixtures, plus the exact 0.162.0-alpha.17.2,
 0.163.0-alpha.10.2 and 0.163.0-alpha.11.1 Desktop/subagent metadata shapes,
-the exact 0.164.0-alpha.11.1, 0.165.0-alpha.1.2 and 0.166.0-alpha.5.1 Desktop shapes,
+the exact 0.164.0-alpha.11.1, 0.165.0-alpha.1.2, 0.166.0-alpha.5.1 and 0.166.0-alpha.6 Desktop shapes,
 the exact 0.164.0-alpha.11.1 App-bundled CLI exec shape, and the
 exact 0.162.1/0.163.0/0.164.0/0.165.0/0.166.0 standalone CLI exec shape. The exact
 0.165.0 CLI and 0.166.0-alpha.5.1 App direct-child shapes are also supported, with matching logical parent,
 execution identity and native spawn metadata required. Nested children of these
 two versions and the 0.164 App's child shape remain unverified and refused. The
 0.165.0-alpha.1.2 App's CLI exec and child shapes, the
-0.166.0-alpha.5.1 App's CLI exec shape and the 0.166.0 CLI child shape
-are also unverified.
+0.166.0-alpha.5.1 App's CLI exec shape, the 0.166.0-alpha.6 App's CLI exec and
+child shapes, and the 0.166.0 CLI child shape are also unverified.
 Desktop-only shapes require matching rollout and logical session IDs. Unknown
 versions or incompatible source/schema combinations stay HOLD. It
 checks session/scope/cursor identity, and uses the same runtime/spool.
@@ -118,7 +118,9 @@ method. Existing signed final/activation/live-outcome gates remain unchanged.
 
 Changed terminal inputs create bounded factual work items. `evidence-plan` and
 `evidence-build` bind Native-selected goals and facts to exact source/version
-manifests without exporting raw transcripts. The native task-family bridge runs
+manifests without exporting raw transcripts. Legacy factual imports preserve a completed
+selection for the same source and policy; mismatched receipts refuse consumption
+until the exact selected facts are restored. The native task-family bridge runs
 frozen historical packages using admitted native tools, and the v2 final kernel
 reconciles actual case/arm outputs and typed all-attempt costs. See the
 [execution integration](docs/implementation/skill-rsi-2026-10-16/README.md) for

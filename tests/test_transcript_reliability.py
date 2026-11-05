@@ -89,7 +89,7 @@ def test_stable_exec_exact_read_restart_and_identity_refusal(tmp_path,version):
  assert len(later)==1 and 'verified_read' not in later[0]['stages']
 
 
-@pytest.mark.parametrize('version',['0.164.0-alpha.11.1','0.165.0-alpha.1.2','0.166.0-alpha.5.1'])
+@pytest.mark.parametrize('version',['0.164.0-alpha.11.1','0.165.0-alpha.1.2','0.166.0-alpha.5.1','0.166.0-alpha.6'])
 def test_exact_desktop_observation_restart_and_unverified_surfaces(tmp_path,version):
  s,p,m=setup(tmp_path,version);m['thread_source']='automation'
  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')
@@ -115,6 +115,7 @@ def test_exact_desktop_observation_restart_and_unverified_surfaces(tmp_path,vers
   ({'cli_version':'0.164.0-alpha.11.2'},'codex-desktop','VERSION_UNVERIFIED'),
   ({'cli_version':'0.165.0-alpha.1.3'},'codex-desktop','VERSION_UNVERIFIED'),
   ({'cli_version':'0.166.0-alpha.5.2'},'codex-desktop','VERSION_UNVERIFIED'),
+  ({'cli_version':'0.166.0-alpha.6.1'},'codex-desktop','VERSION_UNVERIFIED'),
   ({'session_id':'other'},'codex-desktop','SCHEMA_UNVERIFIED'),
   ({'originator':'codex_exec','source':'vscode'},'codex-cli','SOURCE_SCHEMA_UNVERIFIED'),
   ({'source':'cli'},'codex-desktop','SOURCE_SCHEMA_UNVERIFIED'),
@@ -122,7 +123,7 @@ def test_exact_desktop_observation_restart_and_unverified_surfaces(tmp_path,vers
   ({'session_id':None},'codex-desktop','SCHEMA_UNVERIFIED')]:
   p.write_text(json.dumps({'type':'session_meta','payload':{**m,**patch}})+'\n')
   with pytest.raises(ValueError,match=reason):observe_session(restarted,p,'parent',source)
- if version in {'0.165.0-alpha.1.2','0.166.0-alpha.5.1'}:
+ if version in {'0.165.0-alpha.1.2','0.166.0-alpha.5.1','0.166.0-alpha.6'}:
   p.write_text(json.dumps({'type':'session_meta','payload':{**m,'originator':'codex_exec','source':'exec'}})+'\n')
   with pytest.raises(ValueError,match='SOURCE_SCHEMA_UNVERIFIED'):
    observe_session(restarted,p,'parent','codex-cli')
@@ -254,7 +255,7 @@ def test_closed_session_drains_late_tail_once_and_attachment_prefix_is_exact(tmp
  assert s.list('cursors')[0]['offset']==p.stat().st_size
 
 
-@pytest.mark.parametrize('version',['0.164.0-alpha.11.1','0.165.0-alpha.1.2','0.166.0-alpha.5.1'])
+@pytest.mark.parametrize('version',['0.164.0-alpha.11.1','0.165.0-alpha.1.2','0.166.0-alpha.5.1','0.166.0-alpha.6'])
 def test_exact_desktop_rejects_other_logical_session_before_cursor(tmp_path,version):
  s,p,m=setup(tmp_path,version);m['session_id']='other'
  p.write_text(json.dumps({'type':'session_meta','payload':m})+'\n')

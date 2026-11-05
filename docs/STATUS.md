@@ -1,3 +1,46 @@
+# Shared factual ingress and exact Desktop observation — 2026-11-05
+
+An independent engineering check reproduced a remaining selection-ownership
+failure: the legacy factual import could replace a completed builder's receipt,
+while its selected capsule stayed unchanged and the replacement remained
+consumable. Both write paths now check the exact source/policy selection inside
+the existing transaction. A conflicting import refuses; historical receipt
+mismatch blocks consumption. Restoring the exact selected facts recovers without
+replaying a model task. New source/policy facts and legacy-first input remain
+supported; historical artifacts and attempt gates are retained.
+
+Before repair, four mixed-ingress/refusal/recovery cases fail while two new-source
+controls pass. The repaired factual, attribution and recovery suite passes 79
+checks. A separate exact-version repair admits the observed Desktop
+`0.166.0-alpha.6` shape through the existing strict identity gate. CLI, child,
+identity mismatch and unknown versions remain refused. Six unchanged real
+sources reach captured EOF in two passes each: 118 events, zero record gaps and
+zero duplicates on reopening. The adapter suite passes 34 checks.
+
+Three bounded batches account for 36 conversation obligations across 30 distinct
+sessions. Twenty-two selected goal/terminal/tool views cover 16 distinct sources;
+each captured prefix is rehashed to its frozen EOF. Twelve exact sources are
+absent and two interactive CLI shapes remain unverified. Selected views retain
+35 distinct oversized-record gaps. Full-window and natural-origin coverage
+remain unknown. Existing product-adapter corrections, film acceptance and
+Provider-recovery follow-ups stay with their original owners; no other-project
+operation is replayed.
+
+All three installed worker lanes continue progressing. Eight factual capsules
+retain three consumable and five source-drift results. Twenty-eight reviews and
+722 production attempts have produced no candidate, experiment, installation or
+independent task receipt. Four selected factual-input sources remain absent,
+including both sources with verified capability versions. The original semantic
+Provider owner is still unavailable; its qualification and all-attempt cost gates
+remain HOLD. These source repairs do not upgrade the older immutable service.
+
+Validation passes 451 backend checks with required Docker execution and nine
+actual API/DOM checks. Contract, source distribution and clean-wheel identities
+are checked at delivery, including actual CLI behavior outside the checkout.
+The previous scheduled run is automatically archived; current post-final archival
+is not yet verifiable. Skill gain remains HOLD, natural gain UNKNOWN and method
+gain UNVERIFIED.
+
 # Atomic factual selection and collector recovery — 2026-11-04
 
 A concurrent-build reproduction found that two different factual selections
