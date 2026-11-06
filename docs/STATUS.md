@@ -1,3 +1,45 @@
+# Selected factual owner validation — 2026-11-06
+
+V2 readback now compares the facts' top-level `run_id` with the current run,
+in addition to its existing source, version and policy checks. An independent
+isolated probe and root replay reproduced acceptance of a foreign facts owner
+when test code deliberately rewrote the internal capsule and ledger references.
+This is a historical-state consistency repair, not a demonstrated bypass through
+the supported factual ingress or an observed production exploit.
+
+Before repair, two wrong-owner refusal cases fail while the valid control passes.
+The repaired factual and attribution suite passes 82 checks, including review
+consumption, restart and retention of the dispatched snapshot after source
+restoration. The required-Docker backend suite passes 454 checks. Existing
+legacy ingress, attempt costs and unknown-side-effect recovery remain unchanged.
+
+The Vite pin moves from 6.4.4 to the maintainer's
+[6.4.5 patched version](https://github.com/advisories/GHSA-8g5g-mxqh-grgj).
+The dependency audit drops from one moderate advisory to zero. A loopback
+synthetic-file control serves normal JavaScript and refuses four denied-file
+request variants. This custom control already refused them before the update;
+it is a serving regression check, not a reproduction of the advisory's exploit.
+
+Three bounded batches account for 36 obligations across 36 distinct sessions.
+Twenty-three sources receive selected goal, terminal and tool inspection;
+eighteen deterministic patrol results retain NO_CHANGE and backlog 0/6. Eleven
+exact sources are absent and two source schemas remain unverified. One
+oversized-record gap and a truncated tool output remain visible. Full-window
+and natural-origin coverage are unknown. Original game/device/ads acceptance,
+quality-label and Provider-recovery follow-ups retain their original owners.
+
+The collector, review scheduler and evolution scheduler continue progressing.
+The four selected factual sources remain absent; a bounded alternative lookup
+does not establish an observed capability version. Eight factual capsules and
+28 reviews retain no candidate, experiment, installation or independent task
+receipt. The original semantic owner remains unavailable. This source repair
+does not upgrade the older immutable service. Previous scheduled runs are
+automatically archived; current post-final archival is not yet verifiable.
+
+Contract, distribution, clean-wheel behavior and final source/remote/CI identities
+are checked at delivery. Skill gain remains HOLD, natural gain UNKNOWN and
+method gain UNVERIFIED.
+
 # Shared factual ingress and exact Desktop observation — 2026-11-05
 
 An independent engineering check reproduced a remaining selection-ownership

@@ -9,6 +9,70 @@ def fixture(tmp_path, owner='owner'):
     return recovery_fixture(tmp_path, owner=owner, versioned=True)
 
 
+@pytest.mark.parametrize('identity', ['valid', 'foreign_run_identity', None])
+def test_v2_readback_checks_fact_owner_even_when_internal_hashes_match(tmp_path, identity):
+    from skill_observatory.reviewer import reconcile_attempt
+    from skill_observatory.store import Store, canonical
+    s, run, facts = fixture(tmp_path)
+    selected = build_selected_evidence(s, facts)
+    run = s.get('runs', run['id'])
+    plan = evidence_plan(s, run['id'])[0]
+    capsule = build_capsule(s, run)
+    jobs = s.jobs()
+    if identity != 'valid':
+        # Simulate inconsistent historical internal state, including matching
+        # ledger hashes. This is not a supported factual-ingress operation.
+        payload = json.loads(s.read_artifact(selected['capsule_sha256']))
+        payload['run_id'] = identity
+        malformed = s.artifact(canonical(payload))
+        s.put('run_evidence', {**selected, 'capsule_sha256': malformed})
+        s.put('evidence_builds', {**plan, 'selection_sha256': malformed})
+        capsule['facts']['run_id'] = identity
+    attempt = {
+        'id': 'readback', 'run_id': run['id'], 'admission_sha256': 'fixture',
+        'thread_id': 'review_thread', 'turn_id': 'review_turn',
+        'status': 'unknown_after_dispatch', 'capsule_sha256': s.artifact(canonical(capsule)),
+        'usage': None, 'money': None,
+    }
+    s.put('review_attempts', attempt)
+    review = {
+        'schema_version': 1, 'review_id': 'rv_' + run['id'], 'run_id': run['id'],
+        'skill_id': None, 'skill_package_sha256': None, 'attribution': 'unknown',
+        'coverage': {'tools': 'partial', 'outcome': 'unverified'},
+        'outcome': {'status': 'unverified', 'source': 'runtime_only'},
+        'findings': [], 'decision': 'HOLD', 'missing': ['FIXTURE_READBACK'],
+        'evidence_manifest_sha256': s.artifact(canonical(run)),
+        'reviewer_version': 'codex-review-v2',
+    }
+    readback = {
+        'thread_id': attempt['thread_id'], 'turn_id': attempt['turn_id'],
+        'terminal_status': 'completed', 'usage': {'known': 1}, 'texts': [json.dumps(review)],
+    }
+    restarted = Store(s.root)
+    current = build_capsule(restarted, run)
+    if identity == 'valid':
+        assert not current['missing'] and current['facts']['run_id'] == run['id']
+        assert reconcile_attempt(restarted, attempt['id'], readback)['status'] == 'reviewed'
+        assert len(s.list('reviews')) == 1
+        return
+    assert current['facts'] is None
+    assert current['missing'] == ['EVIDENCE_SOURCE_BINDING_DRIFT', 'DIAGNOSTIC_FACTS_REQUIRED']
+    with pytest.raises(ValueError, match='EVIDENCE_SOURCE_BINDING_DRIFT'):
+        reconcile_attempt(restarted, attempt['id'], readback)
+    held = s.get('review_attempts', attempt['id'])
+    assert held['status'] == 'terminal_readback' and held['money'] is None
+    assert held['capsule_sha256'] == attempt['capsule_sha256'] and held['usage'] == {'known': 1}
+    assert not s.list('reviews') and s.jobs() == jobs
+    # Restoring source facts cannot rewrite the already-dispatched snapshot.
+    s.put('run_evidence', selected)
+    s.put('evidence_builds', plan)
+    assert not build_capsule(restarted, run)['missing']
+    with pytest.raises(ValueError, match='REVIEW_CAPSULE_DRIFT'):
+        reconcile_attempt(restarted, attempt['id'], readback)
+    assert s.get('review_attempts', attempt['id'])['capsule_sha256'] == attempt['capsule_sha256']
+    assert not s.list('reviews') and s.jobs() == jobs
+
+
 @pytest.mark.parametrize('owner', ['Project skills owner', '团队 Skill owner'])
 def test_registered_text_owner_can_supply_version_bound_facts(tmp_path, owner):
     s,run,facts=fixture(tmp_path, owner=owner)

@@ -202,6 +202,7 @@ def project_run_evidence(store, run):
 
 
 def _validate_v2(store,run,value):
+    if value.get('run_id')!=run['id']:raise ValueError('EVIDENCE_SOURCE_BINDING_DRIFT')
     projection=project_run_evidence(store,run)
     for field in ('run_binding','source_fingerprint','policy_digest','source_class','actual_terminal','coverage','builder_version'):
         if value[field]!=projection[field]:raise ValueError('EVIDENCE_SOURCE_BINDING_DRIFT')
