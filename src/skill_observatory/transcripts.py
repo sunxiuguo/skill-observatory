@@ -23,6 +23,34 @@ VERIFIED_DIRECT_APP_CHILD_VERSIONS = {"0.164.0-alpha.11.1", "0.166.0-alpha.5.1"}
 CHILD_TERMINAL_EVENTS = {"SubagentStart", "SubagentStop"}
 
 
+
+def _tool_output_texts(value, depth=0):
+    """Unwrap bounded native result text without treating metadata as output."""
+    if depth > 12:
+        return []
+    if isinstance(value, str):
+        texts = [value]
+        if value.lstrip().startswith(('{', '[')):
+            try:
+                texts.extend(_tool_output_texts(json.loads(value), depth + 1))
+            except (ValueError, TypeError, RecursionError):
+                pass
+        # Orchestration can emit several JSON result records after a status line.
+        for line in value.splitlines()[:64]:
+            if line != value and line.lstrip().startswith(('{', '[')):
+                try:
+                    texts.extend(_tool_output_texts(json.loads(line), depth + 1))
+                except (ValueError, TypeError, RecursionError):
+                    pass
+        return texts
+    if isinstance(value, list):
+        return [text for item in value[:64] for text in _tool_output_texts(item, depth + 1)]
+    if isinstance(value, dict):
+        return [text for key in ('output', 'text', 'content', 'result', 'value')
+                if key in value for text in _tool_output_texts(value[key], depth + 1)]
+    return []
+
+
 def _regular_path(path):
     path = Path(path)
     if path.is_symlink() or any(p.is_symlink() for p in path.parents):
@@ -267,19 +295,7 @@ def observe_session(store, path, expected_session_id, source):
             base.update(tool_use_id=v.get("call_id"))
             # Confirm exact whole Skill bytes present in a trusted native tool response.
             outputs = v.get("output", [])
-            texts = []
-            if isinstance(outputs, str):
-                texts.append(outputs)
-            elif isinstance(outputs, list):
-                texts.extend(x.get("text", "") for x in outputs if isinstance(x, dict))
-            expanded = list(texts)
-            for t in texts:
-                try:
-                    j = json.loads(t)
-                    if isinstance(j, dict) and isinstance(j.get("output"), str):
-                        expanded.append(j["output"])
-                except (ValueError, TypeError):
-                    pass
+            expanded = _tool_output_texts(outputs)
             binding = calls.get(v.get("call_id"), {})
             if isinstance(binding,dict):base['tool_name']=binding.get('tool_name')
             from .evidence import diagnostic_from_output

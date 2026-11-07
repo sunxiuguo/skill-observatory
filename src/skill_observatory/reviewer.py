@@ -205,30 +205,55 @@ def _check_attempt_input(store,attempt):
 
 def reconcile_attempt(store,attempt_id,readback):
     """Explicit trusted-owner readback; never invokes thread/start or turn/start."""
-    attempt=store.get('review_attempts',attempt_id)
-    if not attempt or not attempt.get('admission_sha256'):raise ValueError('REVIEW_ATTEMPT_NOT_FOUND')
-    if attempt.get('status')=='completed':return store.get('reviews','rv_'+attempt['run_id'])
     if set(readback)-{'thread_id','turn_id','terminal_status','usage','texts'}:raise ValueError('REVIEW_READBACK_CONTRACT_INVALID')
-    if not attempt.get('thread_id') or readback.get('thread_id')!=attempt['thread_id'] or not attempt.get('turn_id') or readback.get('turn_id')!=attempt['turn_id']:
-        raise ValueError('REVIEW_READBACK_IDENTITY_MISMATCH')
     if readback.get('terminal_status') not in {'completed','failed','interrupted'}:raise ValueError('REVIEW_TERMINAL_READBACK_REQUIRED')
     texts=readback.get('texts',[])
     if not isinstance(texts,list) or any(not isinstance(t,str) for t in texts) or len(canonical(texts))>32000:
         raise ValueError('REVIEW_READBACK_CONTRACT_INVALID')
-    attempt.update(terminal_status=readback['terminal_status'],status='terminal_readback',readback_at=now())
-    if readback.get('usage') is not None:attempt.update(usage=readback['usage'],usage_complete=True,missing=['MONETARY_COST_UNKNOWN'])
-    if texts:attempt['output_sha256']=store.artifact(canonical(redact(texts)))
-    store.put('review_attempts',attempt)
+    output=digest(canonical(redact(texts))) if texts else None
+    with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        attempt=store.get('review_attempts',attempt_id,db)
+        if not attempt or not attempt.get('admission_sha256'):raise ValueError('REVIEW_ATTEMPT_NOT_FOUND')
+        if not attempt.get('thread_id') or readback.get('thread_id')!=attempt['thread_id'] or not attempt.get('turn_id') or readback.get('turn_id')!=attempt['turn_id']:
+            raise ValueError('REVIEW_READBACK_IDENTITY_MISMATCH')
+        terminal=attempt.get('terminal_status')
+        prior_output=attempt.get('readback_output_sha256') or (attempt.get('output_sha256') if terminal else None)
+        if ((terminal and terminal!=readback['terminal_status'])
+                or (terminal and attempt.get('usage') is not None and readback.get('usage') is not None
+                    and canonical(attempt['usage'])!=canonical(readback['usage']))
+                or (prior_output and output and prior_output!=output)):
+            raise ValueError('REVIEW_READBACK_CONFLICT')
+        if attempt.get('status')=='completed':return store.get('reviews','rv_'+attempt['run_id'],db)
+        if not terminal and attempt.get('usage') is not None and readback.get('usage') is not None and canonical(attempt['usage'])!=canonical(readback['usage']):
+            attempt['pre_terminal_usage']=attempt['usage']
+        if not terminal and attempt.get('output_sha256') and output and attempt['output_sha256']!=output:
+            attempt['pre_terminal_output_sha256']=attempt['output_sha256']
+        attempt.update(terminal_status=readback['terminal_status'],status='terminal_readback')
+        attempt.setdefault('readback_at',now())
+        if readback.get('usage') is not None:attempt.update(usage=readback['usage'],usage_complete=True,missing=['MONETARY_COST_UNKNOWN'])
+        if texts:
+            attempt['output_sha256']=store.artifact(canonical(redact(texts)))
+            attempt['readback_output_sha256']=output
+        store.put('review_attempts',attempt,db)
     if readback['terminal_status']!='completed' or not texts:return attempt
     receipt=json.loads(texts[-1])
     if receipt.get('run_id')!=attempt['run_id'] or receipt.get('review_id')!='rv_'+attempt['run_id']:
         raise ValueError('REVIEW_BINDING_MISMATCH')
+    def save(**updates):
+        # Keep concurrently supplied, previously unknown accounting facts.
+        with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            current=store.get('review_attempts',attempt_id,db)
+            if current.get('status')=='completed':return
+            current.update(updates)
+            if updates.get('status')=='completed':current.pop('reason_code',None)
+            store.put('review_attempts',current,db)
     try:
         result=accept_review(store,receipt,'codex-review-v2',check_input=lambda:_check_attempt_input(store,attempt))
     except ValueError as error:
         reason=str(error) if re.fullmatch(r'[A-Z0-9_:-]{1,160}',str(error)) else type(error).__name__
-        store.put('review_attempts',{**attempt,'reason_code':reason})
+        save(reason_code=reason)
         raise
-    attempt.pop('reason_code',None)
-    store.put('review_attempts',{**attempt,'status':'completed'})
+    save(status='completed')
     return result

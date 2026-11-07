@@ -211,3 +211,80 @@ def test_late_readback_rechecks_at_atomic_acceptance_boundary(tmp_path, monkeypa
     monkeypatch.setattr(reviewer, 'accept_review', revoke_before_accept)
     with pytest.raises(ValueError, match='OUTSIDE_SCOPE'):reconcile_attempt(s, attempt['id'], readback)
     assert not s.list('reviews') and s.jobs() == jobs
+
+
+@pytest.mark.parametrize('changed', ['terminal_status', 'usage', 'texts', 'thread_id'])
+def test_terminal_readback_refuses_conflicting_retry_without_rewriting(tmp_path, changed):
+    s, run, attempt, readback = late_case(tmp_path)
+    s.put('review_attempts', attempt)
+    failed = {**readback, 'terminal_status': 'failed'}
+    reconcile_attempt(s, attempt['id'], failed)
+    before = s.get('review_attempts', attempt['id']); jobs = s.jobs()
+    retry = dict(failed)
+    retry[changed] = {'terminal_status': 'completed', 'usage': {'known': 2},
+                      'texts': [json.dumps({'different': 'output'})], 'thread_id': 'other'}[changed]
+    with pytest.raises(ValueError, match='REVIEW_READBACK_(CONFLICT|IDENTITY_MISMATCH)'):
+        reconcile_attempt(Store(s.root), attempt['id'], retry)
+    assert s.get('review_attempts', attempt['id']) == before
+    assert s.jobs() == jobs and not s.list('reviews')
+    assert reconcile_attempt(Store(s.root), attempt['id'], failed) == before
+
+
+@pytest.mark.parametrize('changed', ['terminal_status', 'usage', 'texts', 'thread_id'])
+def test_completed_readback_checks_retry_before_returning_history(tmp_path, changed):
+    s, run, attempt, readback = late_case(tmp_path)
+    s.put('review_attempts', attempt)
+    accepted = reconcile_attempt(s, attempt['id'], readback)
+    before = s.get('review_attempts', attempt['id']); jobs = s.jobs()
+    retry = dict(readback)
+    retry[changed] = {'terminal_status': 'failed', 'usage': {'known': 2},
+                      'texts': [json.dumps({'different': 'output'})], 'thread_id': 'other'}[changed]
+    with pytest.raises(ValueError, match='REVIEW_READBACK_(CONFLICT|IDENTITY_MISMATCH)'):
+        reconcile_attempt(Store(s.root), attempt['id'], retry)
+    assert s.get('review_attempts', attempt['id']) == before and s.jobs() == jobs
+    assert len(s.list('reviews')) == 1
+    assert reconcile_attempt(Store(s.root), attempt['id'], readback) == accepted
+
+
+def test_same_terminal_can_complete_previously_unknown_usage_and_text(tmp_path):
+    s, run, attempt, readback = late_case(tmp_path)
+    s.put('review_attempts', attempt)
+    first = {**readback, 'usage': None, 'texts': []}
+    saved = reconcile_attempt(s, attempt['id'], first)
+    assert saved['usage'] is None and not s.list('reviews')
+    accepted = reconcile_attempt(Store(s.root), attempt['id'], readback)
+    assert accepted['status'] == 'reviewed'
+    assert s.get('review_attempts', attempt['id'])['usage'] == readback['usage']
+    assert s.get('review_attempts', attempt['id'])['money'] is None
+
+
+def test_concurrent_terminal_readbacks_accept_one_exact_terminal(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    s, run, attempt, readback = late_case(tmp_path)
+    s.put('review_attempts', attempt); gate = Barrier(2)
+    def apply(status):
+        gate.wait()
+        try:
+            result = reconcile_attempt(Store(s.root), attempt['id'], {**readback, 'terminal_status': status, 'texts': []})
+            return result['terminal_status']
+        except ValueError as error:
+            return str(error)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(apply, ['failed', 'interrupted']))
+    assert results.count('REVIEW_READBACK_CONFLICT') == 1
+    stored = s.get('review_attempts', attempt['id'])
+    assert stored['terminal_status'] in results and not s.list('reviews')
+
+
+def test_first_terminal_finalizes_partial_usage_then_refuses_replacement(tmp_path):
+    s, run, attempt, readback = late_case(tmp_path)
+    partial = {'known': 1}
+    s.put('review_attempts', {**attempt, 'usage': partial})
+    accepted = reconcile_attempt(s, attempt['id'], readback)
+    stored = s.get('review_attempts', attempt['id'])
+    assert accepted['status'] == 'reviewed'
+    assert stored['pre_terminal_usage'] == partial and stored['usage'] == readback['usage']
+    with pytest.raises(ValueError, match='REVIEW_READBACK_CONFLICT'):
+        reconcile_attempt(Store(s.root), attempt['id'], {**readback, 'usage': {'known': 2}})
+    assert s.get('review_attempts', attempt['id']) == stored

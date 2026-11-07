@@ -1,3 +1,37 @@
+# Nested read capture and terminal readback consistency — 2026-11-07
+
+The transcript adapter now decodes bounded JSON result records and nested native
+output fields before checking the full call-time Skill bytes. A captured source
+replay on an isolated catalog reproduced two complete reads remaining mentioned
+under the old adapter; both become verified reads after repair. A plain-text
+control remains accepted. Both replays reach the same frozen EOF and reopening
+adds no events. This proves read-capture behavior, not historical package
+certification or natural task gain. Partial text, disk drift, unbound calls and
+metadata-only content remain unverified; parser bounds and invalid JSON are checked.
+
+Independent synthetic CLI probes also reproduced a failed terminal readback
+being replaced by completed with different usage on the same attempt. The
+reviewer now locks the first known terminal and accounting/output facts inside
+an immediate transaction. Conflicting terminal, usage, output or identity refuses
+without rewriting the attempt, job or review. Identical readback is idempotent;
+unknown usage/output can still be supplied for the same terminal. The first
+terminal can finalize pre-terminal partial usage, retaining the partial receipt. Scope and
+frozen-input restoration continue through the existing acceptance gate.
+
+Before repair, nine terminal refusal/concurrency checks fail while the unknown
+accounting control passes. The repaired targeted factual suite passes 84 checks;
+the transcript suite passes 58. Required container and distribution acceptance
+are verified at delivery. Foreign attempt-reference ownership remains a separate
+semantic question; content-digest acceptance alone does not establish misuse.
+
+The bounded review continues from the previous pending batch. Missing exact
+sources, unverified schemas and oversized/truncated records remain visible.
+Sixteen existing verified-read receipts still lack their exact source files.
+The installed workers progress but the original semantic Provider owner remains
+unavailable, with no candidate, independent experiment, installation or task
+receipt. These source repairs do not upgrade the older immutable service.
+Skill gain remains HOLD, natural gain UNKNOWN and method gain UNVERIFIED.
+
 # Selected factual owner validation — 2026-11-06
 
 V2 readback now compares the facts' top-level `run_id` with the current run,
