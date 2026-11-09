@@ -17,6 +17,7 @@ jobs:
           enable-cache: false
       - run: uv sync --locked
       - run: uv run python scripts/check_project_contract.py
+      - run: sudo apt-get update && sudo apt-get install -y zstd
       - run: docker pull python@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f
       - run: SKILLOBS_REQUIRE_CONTAINER=1 uv run pytest -q
       - run: uv run python scripts/build.py

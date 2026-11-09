@@ -2,7 +2,8 @@ import json
 import pytest
 from skill_observatory.store import Store
 from skill_observatory.runtime import register,ingest,spool
-from skill_observatory.transcripts import observe_session,track_hook_session,relocate_archived_transcript
+from skill_observatory.transcripts import observe_session,track_hook_session,relocate_archived_transcript,_identity
+from skill_observatory.proactive import _source
 
 
 def setup(tmp_path,version='0.162.0-alpha.17.2',child=False,parent='parent',root='parent'):
@@ -266,3 +267,217 @@ def test_exact_desktop_rejects_other_logical_session_before_cursor(tmp_path,vers
  from skill_observatory.proactive import _source
  selected=_source({'id':'parent','cwd':str(tmp_path),'rollout_path':str(p),'updated_at':1},s)
  assert selected['signal']['reason_code']=='TRANSCRIPT_SCHEMA_UNVERIFIED'
+
+
+def selected_shape(tmp_path, child=False):
+    project = tmp_path / 'project'
+    project.mkdir()
+    store = Store(tmp_path / 'state')
+    store.settings({'scopes': [str(project)]})
+    meta = {
+        'id': 'child' if child else 'root',
+        'session_id': 'root',
+        'cwd': str(project),
+        'cli_version': '0.166.0-alpha.6' if child else '0.167.0-alpha.3.2',
+        'originator': 'Codex Desktop',
+        'source': 'vscode',
+        'thread_source': 'user',
+    }
+    if child:
+        meta.update(
+            thread_source='subagent',
+            parent_thread_id='root',
+            multi_agent_version='v1',
+            source={'subagent': {'thread_spawn': {
+                'parent_thread_id': 'root', 'depth': 1,
+                'agent_path': None, 'agent_nickname': 'ProbeChild', 'agent_role': None,
+            }}},
+        )
+    path = tmp_path / 'session.jsonl'
+    write_meta(path, meta)
+    return store, path, meta, 'codex-subagent' if child else 'codex-desktop'
+
+
+def write_meta(path, meta):
+    path.write_text(json.dumps({'type': 'session_meta', 'payload': meta}) + '\n')
+
+
+def append_record(path, record_type, payload):
+    with path.open('a') as stream:
+        stream.write(json.dumps({'type': record_type, 'payload': payload}) + '\n')
+
+
+def assert_unobserved(store):
+    assert store.list('cursors') == []
+    assert not list((store.root / 'spool').glob('*.json'))
+
+
+@pytest.mark.parametrize('child', [False, True])
+@pytest.mark.parametrize('terminal', ['task_complete', 'turn_aborted'])
+def test_selected_shapes_bind_read_identity_and_repeat_at_eof(tmp_path, child, terminal):
+    store, path, meta, source = selected_shape(tmp_path, child)
+    skill = tmp_path / 'project' / 'flow'
+    skill.mkdir()
+    content = '---\nname: flow\ndescription: flow\n---\nUse the actual workflow.\n'
+    (skill / 'SKILL.md').write_text(content)
+    register(store, skill, 'owner')
+    append_record(path, 'turn_context', {'turn_id': 'turn'})
+    append_record(path, 'event_msg', {'type': 'task_started', 'turn_id': 'turn'})
+    append_record(path, 'response_item', {
+        'type': 'custom_tool_call', 'name': 'exec', 'call_id': 'read',
+        'input': 'cat ' + str(skill / 'SKILL.md'),
+    })
+    append_record(path, 'response_item', {
+        'type': 'custom_tool_call_output', 'call_id': 'read',
+        'output': json.dumps({'value': {'output': content, 'exit_code': 0}}),
+    })
+    append_record(path, 'event_msg', {'type': terminal, 'turn_id': 'turn'})
+    observed = observe_session(store, path, meta['id'], source)
+    assert observed['new_events'] == 4
+    assert observed['offset'] == path.stat().st_size
+    assert observed['execution_session_id'] == meta['id']
+    assert observed['session_id'] == meta['id']
+    assert observed['parent_session_id'] == ('root' if child else None)
+    assert observed['agent_id'] == ('child' if child else None)
+    assert observed['global_denominator'] is None
+    cursor = store.list('cursors')[0]
+    assert cursor['root_session_id'] == 'root'
+    assert cursor['adapter_version'] == meta['cli_version']
+    item = _source({'id': meta['id'], 'cwd': meta['cwd'], 'rollout_path': str(path), 'updated_at': 1}, store)
+    assert 'reason_code' not in item['signal']
+    assert item['signal']['source'] == source
+    assert item['evidence_class'] == ('child_execution' if child else 'unclassified_execution')
+    ingest(store)
+    invocations = store.list('capability_invocations')
+    assert len(invocations) == 1
+    assert set(invocations[0]['stages']) == {'mentioned', 'verified_read'}
+    run = store.list('runs')[0]
+    assert run['session_id'] == meta['id']
+    if child:
+        assert run['root_session_id'] == 'root'
+    else:
+        assert 'root_session_id' not in run
+    assert run.get('parent_session_id') == ('root' if child else None)
+    for current in (store, Store(store.root)):
+        assert observe_session(current, path, meta['id'], source)['new_events'] == 0
+        assert current.list('cursors')[0] == cursor
+        assert len(current.list('capability_invocations')) == 1
+
+
+@pytest.mark.parametrize(('patch', 'source', 'reason'), [
+    ({'cli_version': '0.167.0-alpha.3.3'}, 'codex-desktop', 'TRANSCRIPT_VERSION_UNVERIFIED'),
+    ({'cli_version': '0.167.0'}, 'codex-desktop', 'TRANSCRIPT_VERSION_UNVERIFIED'),
+    ({'session_id': 'foreign'}, 'codex-desktop', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
+    ({'session_id': None}, 'codex-desktop', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
+    ({'id': None}, 'codex-desktop', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
+    ({'id': '', 'session_id': ''}, 'codex-desktop', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
+    ({'originator': 'codex_exec', 'source': 'exec'}, 'codex-cli', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'originator': 'unknown'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'source': 'cli'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'thread_source': None}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'thread_source': 'automation'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'thread_source': 'subagent'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'parent_thread_id': 'foreign'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({}, 'codex-cli', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({}, 'codex-subagent', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+])
+def test_selected_desktop_refuses_unknown_versions_and_adjacent_shapes(tmp_path, patch, source, reason):
+    store, path, meta, _ = selected_shape(tmp_path)
+    write_meta(path, {**meta, **patch})
+    with pytest.raises(ValueError, match='^' + reason + '$'):
+        observe_session(store, path, 'root', source)
+    assert_unobserved(store)
+
+
+@pytest.mark.parametrize(('field', 'value', 'reason'), [
+    ('depth', 2, 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ('depth', True, 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ('depth', '1', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ('parent_thread_id', None, 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ('parent_thread_id', 'foreign', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+])
+def test_selected_child_refuses_spawn_drift(tmp_path, field, value, reason):
+    store, path, meta, source = selected_shape(tmp_path, True)
+    meta['source']['subagent']['thread_spawn'][field] = value
+    write_meta(path, meta)
+    with pytest.raises(ValueError, match='^' + reason + '$'):
+        observe_session(store, path, 'child', source)
+    assert_unobserved(store)
+
+
+@pytest.mark.parametrize(('patch', 'source', 'reason'), [
+    ({'cli_version': '0.166.0-alpha.6.1'}, 'codex-subagent', 'TRANSCRIPT_VERSION_UNVERIFIED'),
+    ({'cli_version': '0.167.0-alpha.3.2'}, 'codex-subagent', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'session_id': 'foreign'}, 'codex-subagent', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
+    ({'session_id': None}, 'codex-subagent', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
+    ({'id': None}, 'codex-subagent', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
+    ({'id': 'root'}, 'codex-subagent', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
+    ({'parent_thread_id': 'foreign'}, 'codex-subagent', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'parent_thread_id': None}, 'codex-subagent', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'multi_agent_version': None}, 'codex-subagent', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'multi_agent_version': 'v2'}, 'codex-subagent', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'thread_source': 'user'}, 'codex-subagent', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'originator': 'codex_exec'}, 'codex-subagent', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'source': {'subagent': {}}}, 'codex-subagent', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({}, 'codex-cli', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+])
+def test_selected_child_refuses_logical_parent_and_surface_drift(tmp_path, patch, source, reason):
+    store, path, meta, _ = selected_shape(tmp_path, True)
+    write_meta(path, {**meta, **patch})
+    with pytest.raises(ValueError, match='^' + reason + '$'):
+        observe_session(store, path, 'child', source)
+    assert_unobserved(store)
+
+
+@pytest.mark.parametrize('child', [False, True])
+def test_selected_shapes_refuse_foreign_session_and_scope_before_observation(tmp_path, child):
+    store, path, meta, source = selected_shape(tmp_path, child)
+    with pytest.raises(ValueError, match='^SESSION_ID_MISMATCH$'):
+        observe_session(store, path, 'foreign', source)
+    assert_unobserved(store)
+    if child:
+        for expected in ({'expected_agent_id': 'foreign'}, {'expected_root_session_id': 'foreign'}):
+            with pytest.raises(ValueError, match='^SESSION_ID_MISMATCH$'):
+                _identity(store, path, source, expected_session_id='child', **expected)
+            assert_unobserved(store)
+    store.settings({'scopes': [str(tmp_path / 'project-neighbor')]})
+    with pytest.raises(ValueError, match='^OUTSIDE_SCOPE$'):
+        observe_session(store, path, meta['id'], source)
+    assert_unobserved(store)
+
+
+@pytest.mark.parametrize('child', [False, True])
+def test_selected_shapes_keep_incomplete_tail_unconsumed(tmp_path, child):
+    store, path, meta, source = selected_shape(tmp_path, child)
+    boundary = path.stat().st_size
+    tail = json.dumps({'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'turn'}})
+    with path.open('a') as stream:
+        stream.write(tail)
+    assert observe_session(store, path, meta['id'], source)['offset'] == boundary
+    assert not list((store.root / 'spool').glob('*.json'))
+    with path.open('a') as stream:
+        stream.write('\n')
+    observed = observe_session(store, path, meta['id'], source)
+    assert observed['offset'] == path.stat().st_size
+    assert observed['new_events'] == 1
+    assert observe_session(Store(store.root), path, meta['id'], source)['new_events'] == 0
+
+
+@pytest.mark.parametrize('child', [False, True])
+def test_selected_shapes_keep_oversized_gap_and_recovery_boundary(tmp_path, child, monkeypatch):
+    from skill_observatory import transcripts
+
+    store, path, meta, source = selected_shape(tmp_path, child)
+    monkeypatch.setattr(transcripts, 'MAX_RECORD_BYTES', 1024)
+    append_record(path, 'response_item', {
+        'type': 'custom_tool_call_output', 'call_id': 'unknown', 'output': 'x' * 2048,
+    })
+    append_record(path, 'event_msg', {'type': 'task_complete', 'turn_id': 'turn'})
+    observed = observe_session(store, path, meta['id'], source)
+    assert observed['offset'] == path.stat().st_size
+    assert observed['new_events'] == 1
+    assert observed['new_gaps'] == 1
+    assert store.list('transcript_gaps')[0]['reason_code'] == 'TRANSCRIPT_RECORD_TOO_LARGE'
+    assert store.list('cursors')[0]['coverage_incomplete']
+    assert observe_session(Store(store.root), path, meta['id'], source)['new_events'] == 0

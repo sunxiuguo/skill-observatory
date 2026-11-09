@@ -1,3 +1,55 @@
+# Compressed review recovery and exact metadata admission — 2026-11-09
+
+The review planner previously reported compressed original sources as missing:
+its exact archive fallback only recognized uncompressed files. Review discovery
+now checks the indexed basename and its exact compressed/archive counterparts,
+retaining scope, session, cwd and version gates. The optional zstd reader bounds
+compressed input, decoded output, decoder memory and wall time. Complete-mode
+review checks stream integrity and source stability and removes temporary decoded
+files on exit. Metadata-only discovery cannot establish body integrity; collector
+cursors still require uncompressed sources. CI installs the optional decoder.
+
+The adapter also admits the observed Desktop user shape for the exact
+0.167.0-alpha.3.2 version and the observed 0.166.0-alpha.6 direct v1 child shape.
+Unknown versions, adjacent source shapes and inconsistent execution/logical/parent
+identities still refuse. One real source reaches its frozen EOF with 186 events
+and no duplicates on repeat/restart; another contains only metadata. The child
+body is reviewed separately by the root and is not a natural outcome sample.
+
+Before repair, compressed-source tests reproduce six failures, while 28 new
+metadata checks fail. Final compressed checks pass 21 cases, and the existing
+transcript suites pass 103. Required-container backend acceptance passes 552
+checks; nine actual API/DOM checks also pass. Independent compressed-reader probes
+retain private temporary permissions, cleanup, corruption/limit and drift refusal.
+A clean installed wheel passes 166 affected checks outside the checkout, with
+all 35 package files matching the reviewed archive. Its actual CLI checks
+compressed discovery, identity refusal, repeated read/finish and doctor. These
+are engineering checks, not independent domain improvement evidence.
+
+Three bounded batches account for 36 obligations across 36 distinct sessions:
+23 selected source views include one metadata-only source, and 13 source schemas
+remain unverified. Eleven views recover exact compressed sources, including
+historical child/interrupted reviews; five oversized-record gaps remain visible.
+Seven deterministic patrols retain NO_CHANGE and backlog 0/6. Full-window and
+natural-origin coverage remain unknown; more sources and original-owner game,
+quality, device, research and Provider-recovery follow-ups remain open.
+
+The compressed originals also recover two real, version-bound factual-input
+sources. Native-selected goals and acceptance conditions are bound through the
+existing builder and capsule readback; both retries are idempotent and each
+resumes one pre-dispatch evidence wait. Ten factual capsules now exist. The new
+two retain unknown completion, origin, environment and all-attempt cost. This
+moves those obligations to the unavailable original semantic Provider owner;
+it does not create an independent review, candidate, experiment, installation
+or task receipt, nor upgrade the older immutable worker service.
+
+The previous scheduled run has no completion receipt and remains pending review;
+this run resumes its durable batch. Current post-final archival is not yet
+verifiable. Distribution, clean-wheel behavior, public-content review and final
+source/remote/CI identities are checked at delivery. Evolution disposition is
+project_record; Skill gain remains HOLD, natural gain UNKNOWN and method gain
+UNVERIFIED.
+
 # Nested read capture and terminal readback consistency — 2026-11-07
 
 The transcript adapter now decodes bounded JSON result records and nested native

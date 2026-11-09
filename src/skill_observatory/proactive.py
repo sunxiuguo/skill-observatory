@@ -123,27 +123,29 @@ def _source(row, store, index_parent=None):
     signal = {'path': str(path)}
     exclusion_lineage = None
     try:
-        from .transcripts import archive_path
-        resolved = archive_path(path, index_parent)
+        from .review_sources import review_path, review_source
+        resolved = review_path(path, index_parent)
         if resolved != path:signal.update(path=str(resolved), indexed_path=row['rollout_path'])
         path = resolved
         if path.is_symlink() or not path.is_file():
             raise ValueError('TRANSCRIPT_NOT_REGULAR')
         stat = path.stat()
         signal.update(size=stat.st_size, mtime_ns=stat.st_mtime_ns, inode=stat.st_ino)
-        with path.open('rb') as f:
-            first = f.readline(65537)
-        if len(first) > 65536:
-            raise ValueError('TRANSCRIPT_META_TOO_LARGE')
-        envelope = json.loads(first)
-        if not isinstance(envelope, dict) or not isinstance(envelope.get('payload'), dict):
-            raise ValueError('TRANSCRIPT_META_INVALID')
-        meta = envelope['payload']
-        signal['meta_sha256'] = digest(first)
-        exclusion_lineage = _exclusion_lineage(envelope, row)
-        child = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
-        source = 'codex-subagent' if child else ('codex-desktop' if meta.get('originator') == 'Codex Desktop' else 'codex-cli')
-        identity = _identity(store, path, source, expected_session_id=row['id'])
+        if path.name.endswith('.jsonl.zst'):signal['compression'] = 'zstd'
+        with review_source(path, metadata_only=True) as view:
+            with view.open('rb') as f:
+                first = f.readline(65537)
+            if len(first) > 65536:
+                raise ValueError('TRANSCRIPT_META_TOO_LARGE')
+            envelope = json.loads(first)
+            if not isinstance(envelope, dict) or not isinstance(envelope.get('payload'), dict):
+                raise ValueError('TRANSCRIPT_META_INVALID')
+            meta = envelope['payload']
+            signal['meta_sha256'] = digest(first)
+            exclusion_lineage = _exclusion_lineage(envelope, row)
+            child = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
+            source = 'codex-subagent' if child else ('codex-desktop' if meta.get('originator') == 'Codex Desktop' else 'codex-cli')
+            identity = _identity(store, view, source, expected_session_id=row['id'])
         if identity['execution_session_id'] != row['id']:
             raise ValueError('TRANSCRIPT_INDEX_ID_MISMATCH')
         if str(identity['cwd']) != str(Path(row['cwd']).resolve()):

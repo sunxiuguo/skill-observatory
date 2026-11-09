@@ -73,15 +73,17 @@ uv run skillobs observe-session /absolute/selected-session.jsonl \
 The versioned transcript adapter supports certified 0.160.0/0.160.1 and
 0.162.0-alpha.2 fixtures, plus the exact 0.162.0-alpha.17.2,
 0.163.0-alpha.10.2 and 0.163.0-alpha.11.1 Desktop/subagent metadata shapes,
-the exact 0.164.0-alpha.11.1, 0.165.0-alpha.1.2, 0.166.0-alpha.5.1 and 0.166.0-alpha.6 Desktop shapes,
+the exact 0.164.0-alpha.11.1, 0.165.0-alpha.1.2, 0.166.0-alpha.5.1, 0.166.0-alpha.6 and 0.167.0-alpha.3.2 Desktop shapes,
 the exact 0.164.0-alpha.11.1 App-bundled CLI exec shape, and the
 exact 0.162.1/0.163.0/0.164.0/0.165.0/0.166.0 standalone CLI exec shape. The exact
-0.165.0 CLI and 0.166.0-alpha.5.1 App direct-child shapes are also supported, with matching logical parent,
+0.165.0 CLI and 0.166.0-alpha.5.1/0.166.0-alpha.6 App direct-child shapes are also supported, with matching logical parent,
 execution identity and native spawn metadata required. Nested children of these
-two versions and the 0.164 App's child shape remain unverified and refused. The
+versions and the 0.164 App's child shape remain unverified and refused. The
 0.165.0-alpha.1.2 App's CLI exec and child shapes, the
-0.166.0-alpha.5.1 App's CLI exec shape, the 0.166.0-alpha.6 App's CLI exec and
-child shapes, and the 0.166.0 CLI child shape are also unverified.
+0.166.0-alpha.5.1 App's CLI exec shape, the 0.166.0-alpha.6 App's CLI exec shape,
+and the 0.166.0 CLI child shape are also unverified.
+The 0.167.0-alpha.3.2 gate admits only its observed Desktop user shape;
+its automation, child and CLI shapes remain unverified.
 Desktop-only shapes require matching rollout and logical session IDs. Unknown
 versions or incompatible source/schema combinations stay HOLD. It
 checks session/scope/cursor identity, and uses the same runtime/spool.
@@ -138,6 +140,13 @@ use the single [proactive review workflow](docs/PROACTIVE_REVIEW.md). Its
 resume unfinished batches and retain forward follow-ups in the existing ledger.
 The Native root performs evidence review and authorized repairs; planning and
 root accounting do not grant promotion authority or certify RSI gains.
+
+Review discovery also recognizes exact `.jsonl.zst` counterparts at the indexed
+path or its index-owned archive directory. Install `zstd` for these optional
+sources; an absent decoder remains a visible HOLD. Root review uses a bounded
+temporary decoded view and validates the complete stream before consuming body
+evidence. Metadata discovery alone proves no body integrity. Collector cursors
+still require the original uncompressed transcript.
 
 For an immediate review of the current or explicitly selected session, use
 `retro-plan --index-db CODEX_INDEX [--session-id SESSION]` and the same
