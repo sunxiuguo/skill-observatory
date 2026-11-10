@@ -312,10 +312,17 @@ def assert_unobserved(store):
     assert not list((store.root / 'spool').glob('*.json'))
 
 
-@pytest.mark.parametrize('child', [False, True])
+@pytest.mark.parametrize(('child', 'surface'), [
+    (False, 'user'), (False, 'automation'), (True, 'v1'), (True, 'current'),
+])
 @pytest.mark.parametrize('terminal', ['task_complete', 'turn_aborted'])
-def test_selected_shapes_bind_read_identity_and_repeat_at_eof(tmp_path, child, terminal):
+def test_selected_shapes_bind_read_identity_and_repeat_at_eof(tmp_path, child, surface, terminal):
     store, path, meta, source = selected_shape(tmp_path, child)
+    if surface == 'automation':
+        meta['thread_source'] = 'automation'
+    elif surface == 'current':
+        meta['cli_version'] = '0.167.0-alpha.3.2'
+    write_meta(path, meta)
     skill = tmp_path / 'project' / 'flow'
     skill.mkdir()
     content = '---\nname: flow\ndescription: flow\n---\nUse the actual workflow.\n'
@@ -375,7 +382,7 @@ def test_selected_shapes_bind_read_identity_and_repeat_at_eof(tmp_path, child, t
     ({'originator': 'unknown'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
     ({'source': 'cli'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
     ({'thread_source': None}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
-    ({'thread_source': 'automation'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'thread_source': 'background'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
     ({'thread_source': 'subagent'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
     ({'parent_thread_id': 'foreign'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
     ({}, 'codex-cli', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
@@ -407,7 +414,7 @@ def test_selected_child_refuses_spawn_drift(tmp_path, field, value, reason):
 
 @pytest.mark.parametrize(('patch', 'source', 'reason'), [
     ({'cli_version': '0.166.0-alpha.6.1'}, 'codex-subagent', 'TRANSCRIPT_VERSION_UNVERIFIED'),
-    ({'cli_version': '0.167.0-alpha.3.2'}, 'codex-subagent', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'cli_version': '0.167.0-alpha.3.3'}, 'codex-subagent', 'TRANSCRIPT_VERSION_UNVERIFIED'),
     ({'session_id': 'foreign'}, 'codex-subagent', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
     ({'session_id': None}, 'codex-subagent', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
     ({'id': None}, 'codex-subagent', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
@@ -426,6 +433,58 @@ def test_selected_child_refuses_logical_parent_and_surface_drift(tmp_path, patch
     store, path, meta, _ = selected_shape(tmp_path, True)
     write_meta(path, {**meta, **patch})
     with pytest.raises(ValueError, match='^' + reason + '$'):
+        observe_session(store, path, 'child', source)
+    assert_unobserved(store)
+
+
+@pytest.mark.parametrize('child', [False, True])
+@pytest.mark.parametrize('patch', [
+    {'cli_version': '0.167.0-alpha.3.3'},
+    {'originator': 'codex_exec'},
+    {'session_id': 'foreign'},
+    {'thread_source': None},
+    {'thread_source': []},
+    {'thread_source': {}},
+    {'parent_thread_id': 'foreign'},
+    {'source': 'exec'},
+])
+def test_current_automation_and_child_refuse_adjacent_contracts(tmp_path, child, patch):
+    store, path, meta, source = selected_shape(tmp_path, child)
+    meta['cli_version'] = '0.167.0-alpha.3.2'
+    if not child:
+        meta['thread_source'] = 'automation'
+    write_meta(path, meta)
+    # Establish the admitted control before trying the malformed source.
+    assert _source({'id': meta['id'], 'cwd': meta['cwd'], 'rollout_path': str(path),
+                    'updated_at': 1}, store)['signal'].get('reason_code') is None
+    write_meta(path, {**meta, **patch})
+    with pytest.raises(ValueError, match='UNVERIFIED'):
+        observe_session(store, path, meta['id'], source)
+    assert_unobserved(store)
+
+
+@pytest.mark.parametrize('patch', [
+    {'depth': 2}, {'depth': True}, {'depth': '1'},
+    {'parent_thread_id': 'foreign'}, {'parent_thread_id': None},
+])
+def test_current_child_refuses_spawn_drift(tmp_path, patch):
+    store, path, meta, source = selected_shape(tmp_path, True)
+    meta['cli_version'] = '0.167.0-alpha.3.2'
+    write_meta(path, meta)
+    assert _identity(store, path, source, expected_session_id='child')['parent_session_id'] == 'root'
+    meta['source']['subagent']['thread_spawn'].update(patch)
+    write_meta(path, meta)
+    with pytest.raises(ValueError, match='^TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED$'):
+        observe_session(store, path, 'child', source)
+    assert_unobserved(store)
+
+
+@pytest.mark.parametrize('multi_agent_version', [None, 'v2'])
+def test_current_child_requires_observed_multi_agent_version(tmp_path, multi_agent_version):
+    store, path, meta, source = selected_shape(tmp_path, True)
+    meta.update(cli_version='0.167.0-alpha.3.2', multi_agent_version=multi_agent_version)
+    write_meta(path, meta)
+    with pytest.raises(ValueError, match='^TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED$'):
         observe_session(store, path, 'child', source)
     assert_unobserved(store)
 

@@ -1,3 +1,53 @@
+# Exact Desktop automation and child review admission — 2026-11-10
+
+The exact 0.167.0-alpha.3.2 adapter now admits the observed Desktop automation
+and direct v1 child shapes. It retains Desktop/source, execution/logical/parent,
+integer depth-one and multi-agent-version checks. Unknown versions, malformed
+source labels and inconsistent identities refuse before observation. Historical
+origin labels do not certify natural execution or improvement.
+
+The final regression cases against the previous parser reproduce 25 failures;
+the repaired affected suites pass 192 checks. Root real-source replay reaches
+unchanged captured EOF for an automation (316,764 bytes, 12 events) and a child
+(32,688,658 bytes, 1,854 events); repeat and restarted reads add zero events.
+The child retains separate execution, parent and root identity. Independent
+synthetic probes pass 113 checks and 1,188 differential cases find no unintended
+admission. These are engineering checks, not independent domain evaluation.
+
+Three bounded batches account for 36 obligations across 27 distinct sessions:
+27 selected source views and nine index/header cwd refusals. Seven distinct
+compressed originals are recovered; four distinct oversized-record gaps remain.
+Changing sources reopen through the existing finish gate. More sources remain;
+full-window and natural-origin denominators are unknown. Game candidates and
+actual-play counting, research truth and interrupted Provider recovery remain
+with their original owners; no other-project operation is replayed.
+
+The full required-container run initially passes 572 checks and errors on three
+container checks because Docker is stopped. After restoring the local container
+environment, all four tests in that module pass. Nine actual API/DOM checks and
+the contract pass. A clean installed wheel outside the checkout passes 213
+affected checks; all 35 package files match source and archive. Its actual CLI
+checks automation observation, repeat/finish idempotency, compressed discovery,
+identity-drift refusal, cleanup and doctor. Public-content review and exact
+local/remote/CI identities are checked at delivery.
+
+A recovered compressed original also supplies one more exact, version-bound
+user goal and acceptance condition through the existing factual builder. Repeated
+build and capsule readback retain unknown completion, natural origin, environment
+and cost. This prepares semantic review input; it does not certify a task result.
+The other selected factual gaps retain missing observed versions or the existing
+compressed-source size limit.
+
+All installed worker lanes progress on their previous immutable build. The
+original semantic reviewer owner still points to a retired integration and is
+unavailable; no candidate, independent experiment, installation or task receipt
+is produced. Its existing concrete owner handoff remains pending, rather than
+replaying attempts or substituting providers. No global Skill/hook/config or
+running Observatory service upgrade occurs. The previous completed automation
+is archived by the scheduler; the earlier interrupted run remains visible.
+Current post-final archival is not yet verifiable. Evolution disposition is
+project_record; Skill gain HOLD, natural gain UNKNOWN and method UNVERIFIED.
+
 # Compressed review recovery and exact metadata admission — 2026-11-09
 
 The review planner previously reported compressed original sources as missing:
