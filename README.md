@@ -76,14 +76,14 @@ The versioned transcript adapter supports certified 0.160.0/0.160.1 and
 the exact 0.164.0-alpha.11.1, 0.165.0-alpha.1.2, 0.166.0-alpha.5.1, 0.166.0-alpha.6 and 0.167.0-alpha.3.2 Desktop shapes,
 the exact 0.164.0-alpha.11.1 App-bundled CLI exec shape, and the
 exact 0.162.1/0.163.0/0.164.0/0.165.0/0.166.0 standalone CLI exec shape. The exact
-0.165.0 CLI and 0.166.0-alpha.5.1/0.166.0-alpha.6 App direct-child shapes are also supported, with matching logical parent,
+0.165.0 CLI and 0.164.0-alpha.11.1/0.166.0-alpha.5.1/0.166.0-alpha.6/0.167.0-alpha.3.2 App direct-child shapes are also supported, with matching logical parent,
 execution identity and native spawn metadata required. Nested children of these
-versions and the 0.164 App's child shape remain unverified and refused. The
+versions remain unverified and refused. The
 0.165.0-alpha.1.2 App's CLI exec and child shapes, the
 0.166.0-alpha.5.1 App's CLI exec shape, the 0.166.0-alpha.6 App's CLI exec shape,
 and the 0.166.0 CLI child shape are also unverified.
-The 0.167.0-alpha.3.2 gate admits only its observed Desktop user shape;
-its automation, child and CLI shapes remain unverified.
+The 0.167.0-alpha.3.2 gate admits its observed Desktop user and automation
+shapes and direct v1 children; its CLI shape remains unverified.
 Desktop-only shapes require matching rollout and logical session IDs. Unknown
 versions or incompatible source/schema combinations stay HOLD. It
 checks session/scope/cursor identity, and uses the same runtime/spool.

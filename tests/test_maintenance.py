@@ -92,3 +92,53 @@ def test_reader_survives_raw_removal_during_compression(tmp_path,monkeypatch):
     monkeypatch.setattr(Path,'read_bytes',racing_read)
     assert s.read_artifact(h)==raw
     assert moved==[True]
+
+
+def test_inventory_survives_lossless_compression_during_scan(tmp_path, monkeypatch):
+    s=Store(tmp_path/'state');raw=b'lossless-evidence'*500;h=s.artifact(raw)
+    path=s.root/'artifacts'/h
+    original=Path.stat;compressed=[]
+    # Mark the operation before entering the compressor's own stat calls.
+    def once(selected, **kwargs):
+        result=original(selected, **kwargs)
+        if selected==path and not compressed:
+            compressed.append(None)
+            compressed[0]=compress_artifacts(s,apply=True)
+        return result
+    monkeypatch.setattr(Path,'stat',once)
+    report=storage_inventory(s)
+    assert compressed[0]['files']==1
+    assert report['groups']['artifacts']['files']==1
+    assert report['groups']['artifacts']['bytes']>0
+    assert not path.exists() and s.read_artifact(h)==raw
+
+
+def test_inventory_survives_wal_checkpoint_during_scan(tmp_path, monkeypatch):
+    s=Store(tmp_path/'state');wal=s.db_path.with_name('state.sqlite3-wal')
+    wal.write_bytes(b'checkpointed');original=Path.stat;removed=[]
+    def racing_stat(selected, **kwargs):
+        result=original(selected, **kwargs)
+        if selected==wal and not removed:
+            removed.append(True);wal.unlink()
+        return result
+    monkeypatch.setattr(Path,'stat',racing_stat)
+    report=storage_inventory(s)
+    assert removed and report['groups']['wal']['bytes']>=0
+
+
+def test_inventory_skips_missing_and_nonregular_but_keeps_io_errors(tmp_path, monkeypatch):
+    s=Store(tmp_path/'state');h=s.artifact(b'evidence');path=s.root/'artifacts'/h
+    (path.parent/'alias').symlink_to(path)
+    (path.parent/'directory').mkdir()
+    assert storage_inventory(s)['groups']['artifacts']=={'files':1,'bytes':8}
+    original=Path.stat
+    def missing(selected, **kwargs):
+        if selected==path:raise FileNotFoundError(str(selected))
+        return original(selected, **kwargs)
+    monkeypatch.setattr(Path,'stat',missing)
+    assert storage_inventory(s)['groups']['artifacts']=={'files':0,'bytes':0}
+    def denied(selected, **kwargs):
+        if selected==path:raise PermissionError(str(selected))
+        return original(selected, **kwargs)
+    monkeypatch.setattr(Path,'stat',denied)
+    with pytest.raises(PermissionError):storage_inventory(s)

@@ -1,3 +1,44 @@
+# Storage inventory during lossless maintenance — 2026-11-11
+
+Storage inventory previously collected paths and read their sizes later. Actual
+lossless compression between those reads removed a raw artifact and caused
+FileNotFoundError; WAL disappearance had the same race. Three controlled
+regression checks fail before repair. Inventory now reads each regular file's
+metadata once and skips only disappearing files. Symlinks remain excluded and
+permission errors remain visible. This is a concurrent observation, not an atomic
+storage snapshot or evidence of reclaimed production space.
+
+The affected suites pass 32 checks. The required-container backend passes 582
+checks; nine actual API/DOM checks and the contract pass. Build/archive auditing
+passes. An isolated installed wheel passes the same 32 affected checks outside
+the checkout; 16 actual CLI inventories overlap compression of 128 artifacts,
+whose original bytes remain readable by their hashes. Doctor passes. These are
+engineering checks, not independent Skill improvement evidence. README admission
+notes now match the already supported exact automation and direct-child shapes.
+
+Three bounded batches account for 36 obligations across 35 distinct sessions:
+25 selected source views and 11 index/header cwd refusals. Four distinct compressed
+originals are recovered for review; eight oversized records across four distinct
+sources remain gaps. One changing game source appears twice; views are not
+independent tasks. Game player handoffs retain actual saved/UI revision boundaries
+and unfinished full-life/100-play obligations. Historical factual-selection
+concurrency findings are already repaired and covered by current regressions.
+More sources remain; full-window and natural-origin denominators are unknown.
+
+A separate compressed original supplies another real, exact-version-bound goal
+and acceptance condition through the existing factual builder. Its repeat and
+capsule readback agree and one known pre-dispatch job resumes. Twelve factual
+capsules now exist; independent completion, origin, environment and all-attempt
+cost remain unknown. The original semantic reviewer integration is still
+unavailable, with no candidate, experiment, installation or independent task
+receipt. Its existing owner continuation remains open. Installed worker services
+are not upgraded and no global Skill/provider configuration changes occur.
+
+The previous completed run is archived by the scheduler. The earlier interrupted
+run remains visible; current post-final archival is not yet verifiable. Scoped
+source delivery requires final local/remote/CI readback. Evolution disposition is
+project_record; Skill gain HOLD, natural gain UNKNOWN and method UNVERIFIED.
+
 # Exact Desktop automation and child review admission — 2026-11-10
 
 The exact 0.167.0-alpha.3.2 adapter now admits the observed Desktop automation

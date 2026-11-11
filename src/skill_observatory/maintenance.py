@@ -7,6 +7,7 @@ import gzip
 import json
 import os
 from pathlib import Path
+import stat
 import time
 from .store import atomic_write,canonical,digest,now
 
@@ -22,12 +23,19 @@ def _lock(store):
 def storage_inventory(store):
     groups={}
     for name in ('artifacts','spool','quarantine','recovery'):
-        files=[p for p in (store.root/name).glob('*') if p.is_file() and not p.is_symlink()]
-        groups[name]={'files':len(files),'bytes':sum(p.stat().st_size for p in files)}
+        count=0;size=0
+        for path in (store.root/name).glob('*'):
+            try:metadata=path.lstat()
+            except FileNotFoundError:continue
+            if stat.S_ISREG(metadata.st_mode):
+                count+=1;size+=metadata.st_size
+        groups[name]={'files':count,'bytes':size}
     with store.connect() as db:
         groups['database']={'bytes':store.db_path.stat().st_size,'page_count':db.execute('PRAGMA page_count').fetchone()[0],
             'free_pages':db.execute('PRAGMA freelist_count').fetchone()[0]}
-        groups['wal']={'bytes':store.db_path.with_name('state.sqlite3-wal').stat().st_size if store.db_path.with_name('state.sqlite3-wal').exists() else 0}
+        try:wal_bytes=store.db_path.with_name('state.sqlite3-wal').stat().st_size
+        except FileNotFoundError:wal_bytes=0
+        groups['wal']={'bytes':wal_bytes}
     return {'groups':groups,'total_bytes':sum(x['bytes'] for x in groups.values()),'claim':'allocated_bytes_not_logical_evidence_count'}
 
 
