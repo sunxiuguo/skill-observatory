@@ -1,3 +1,41 @@
+# Background progress recovery and factual continuation — 2026-11-12
+
+The installed HTTP service remained alive while all three background lanes had
+stopped updating for about 19 hours; its authenticated health endpoint returned
+503. The ledger passed quick_check and had no running/dispatched/unknown jobs.
+A private SQLite backup, its hash, service configuration and lane receipts were
+preserved before an owner-managed stop/start of the same immutable runtime.
+All three lanes then advanced with successful progress, and authenticated health
+returned 200/healthy on readback. Configuration bytes and worker build identity
+are unchanged. The original stop cause remains unknown; the installed older
+artifact lacks the diagnostic-failure guards already present in current source.
+This recovery is not an upgrade or proof that the stop cannot recur.
+
+Two bounded batches account for 24 distinct session obligations: 17 selected
+source views, five index/header cwd refusals, one compressed-size refusal and
+one unsupported-source-schema refusal. Three compressed review originals were
+recovered. No oversized record was skipped within the selected views; refused
+sources remain coverage gaps. Actual maintenance outputs support NO_CHANGE;
+child copy proposals and cloud probes retain their root integration/real-run
+acceptance boundaries. Historical repaired ingress findings are not new defects.
+More sources remain; full-window and natural-origin denominators are unknown.
+
+Another compressed original supplied an exact task goal and acceptance condition
+through the existing factual builder. Repeated construction and capsule readback
+agree, with no missing facts. Its known pre-dispatch job now defers because the
+original semantic Provider owner remains unavailable. Thirteen factual capsules,
+28 reviews and 722 model attempts exist; no candidate, independent experiment,
+installation or task receipt establishes improvement. Completion, natural origin,
+environment and all-attempt costs remain unknown. No global Skill, hook or
+Provider configuration was changed, and no other-project operation was replayed.
+
+Eleven existing worker-lifecycle/storage checks and the contract check pass.
+No source-code change is needed for this recovery. The previous completed run
+was archived by the scheduler; this run's post-final archival is not yet
+verifiable. Evolution disposition is project_record; Skill gain HOLD, natural
+gain UNKNOWN and method UNVERIFIED. The original Provider owner continuation
+and remaining bounded review work stay pending.
+
 # Storage inventory during lossless maintenance — 2026-11-11
 
 Storage inventory previously collected paths and read their sizes later. Actual
