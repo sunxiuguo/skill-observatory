@@ -28,7 +28,15 @@ def project(store,stamp=None):
                 except (ValueError,TypeError):pass
             rows.append({'id':id_,'observed_count':n,'last_material_at':last,'age_seconds':age,'next_action':action})
         pending_facts=db.execute("SELECT count(*) FROM jobs WHERE reason_code IN ('DIAGNOSTIC_FACTS_REQUIRED','EVIDENCE_CAPSULE_RUN_DRIFT')").fetchone()[0]
-        unknown_attempts=db.execute("SELECT count(*) FROM entities WHERE kind IN ('review_attempts','generation_attempts','broker_attempts','task_family_attempts') AND json_extract(data,'$.status') IN ('unknown_after_dispatch','dispatched','interrupted','unknown','failed_after_dispatch')").fetchone()[0]
+        # Reviewer validation can fail after an observed terminal. That failure
+        # retains its rejection/cost evidence without requiring transport readback.
+        unknown_attempts=db.execute("""
+            SELECT count(*) FROM entities
+            WHERE kind IN ('review_attempts','generation_attempts','broker_attempts','task_family_attempts')
+              AND json_extract(data,'$.status') IN ('unknown_after_dispatch','dispatched','interrupted','unknown','failed_after_dispatch')
+              AND (kind!='review_attempts' OR COALESCE(json_extract(data,'$.terminal_status'),'')
+                   NOT IN ('completed','failed','interrupted'))
+        """).fetchone()[0]
         gaps=db.execute("SELECT count(*) FROM entities WHERE kind='transcript_gaps'").fetchone()[0]
         waiting=db.execute("SELECT count(*) FROM entities WHERE kind='outcome_followups' AND json_extract(data,'$.status')='pending'").fetchone()[0]
         items=[(r['kind'],json.loads(r['data'])) for r in db.execute("SELECT kind,data FROM entities WHERE kind IN ('evidence_builds','evaluations','verdicts','task_family_attempts','installations','candidates','experiments','owner_package_requests','owner_proposals') ORDER BY rowid DESC")]

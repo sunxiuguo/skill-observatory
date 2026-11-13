@@ -314,6 +314,7 @@ def assert_unobserved(store):
 
 @pytest.mark.parametrize(('child', 'surface'), [
     (False, 'user'), (False, 'automation'), (True, 'v1'), (True, 'current'),
+    (False, 'latest_automation'), (True, 'latest_child'),
 ])
 @pytest.mark.parametrize('terminal', ['task_complete', 'turn_aborted'])
 def test_selected_shapes_bind_read_identity_and_repeat_at_eof(tmp_path, child, surface, terminal):
@@ -322,6 +323,10 @@ def test_selected_shapes_bind_read_identity_and_repeat_at_eof(tmp_path, child, s
         meta['thread_source'] = 'automation'
     elif surface == 'current':
         meta['cli_version'] = '0.167.0-alpha.3.2'
+    elif surface in ('latest_automation', 'latest_child'):
+        meta['cli_version'] = '0.167.0-alpha.4.1'
+        if not child:
+            meta['thread_source'] = 'automation'
     write_meta(path, meta)
     skill = tmp_path / 'project' / 'flow'
     skill.mkdir()
@@ -438,8 +443,10 @@ def test_selected_child_refuses_logical_parent_and_surface_drift(tmp_path, patch
 
 
 @pytest.mark.parametrize('child', [False, True])
+@pytest.mark.parametrize('version', ['0.167.0-alpha.3.2', '0.167.0-alpha.4.1'])
 @pytest.mark.parametrize('patch', [
     {'cli_version': '0.167.0-alpha.3.3'},
+    {'cli_version': '0.167.0-alpha.4.2'},
     {'originator': 'codex_exec'},
     {'session_id': 'foreign'},
     {'thread_source': None},
@@ -448,9 +455,9 @@ def test_selected_child_refuses_logical_parent_and_surface_drift(tmp_path, patch
     {'parent_thread_id': 'foreign'},
     {'source': 'exec'},
 ])
-def test_current_automation_and_child_refuse_adjacent_contracts(tmp_path, child, patch):
+def test_current_automation_and_child_refuse_adjacent_contracts(tmp_path, child, version, patch):
     store, path, meta, source = selected_shape(tmp_path, child)
-    meta['cli_version'] = '0.167.0-alpha.3.2'
+    meta['cli_version'] = version
     if not child:
         meta['thread_source'] = 'automation'
     write_meta(path, meta)
@@ -463,13 +470,14 @@ def test_current_automation_and_child_refuse_adjacent_contracts(tmp_path, child,
     assert_unobserved(store)
 
 
+@pytest.mark.parametrize('version', ['0.167.0-alpha.3.2', '0.167.0-alpha.4.1'])
 @pytest.mark.parametrize('patch', [
     {'depth': 2}, {'depth': True}, {'depth': '1'},
     {'parent_thread_id': 'foreign'}, {'parent_thread_id': None},
 ])
-def test_current_child_refuses_spawn_drift(tmp_path, patch):
+def test_current_child_refuses_spawn_drift(tmp_path, version, patch):
     store, path, meta, source = selected_shape(tmp_path, True)
-    meta['cli_version'] = '0.167.0-alpha.3.2'
+    meta['cli_version'] = version
     write_meta(path, meta)
     assert _identity(store, path, source, expected_session_id='child')['parent_session_id'] == 'root'
     meta['source']['subagent']['thread_spawn'].update(patch)
@@ -480,12 +488,22 @@ def test_current_child_refuses_spawn_drift(tmp_path, patch):
 
 
 @pytest.mark.parametrize('multi_agent_version', [None, 'v2'])
-def test_current_child_requires_observed_multi_agent_version(tmp_path, multi_agent_version):
+@pytest.mark.parametrize('version', ['0.167.0-alpha.3.2', '0.167.0-alpha.4.1'])
+def test_current_child_requires_observed_multi_agent_version(tmp_path, multi_agent_version, version):
     store, path, meta, source = selected_shape(tmp_path, True)
-    meta.update(cli_version='0.167.0-alpha.3.2', multi_agent_version=multi_agent_version)
+    meta.update(cli_version=version, multi_agent_version=multi_agent_version)
     write_meta(path, meta)
     with pytest.raises(ValueError, match='^TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED$'):
         observe_session(store, path, 'child', source)
+    assert_unobserved(store)
+
+
+def test_alpha4_unobserved_user_surface_stays_refused(tmp_path):
+    store, path, meta, source = selected_shape(tmp_path)
+    meta['cli_version'] = '0.167.0-alpha.4.1'
+    write_meta(path, meta)
+    with pytest.raises(ValueError, match='^TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED$'):
+        observe_session(store, path, 'root', source)
     assert_unobserved(store)
 
 

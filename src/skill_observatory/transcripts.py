@@ -15,11 +15,11 @@ ALPHA_17 = "0.162.0-alpha.17.2"
 ALPHA_10_APP = "0.163.0-alpha.10.2"
 ALPHA_11_APP = "0.163.0-alpha.11.1"
 VERIFIED_APP_VERSIONS = {ALPHA_17, ALPHA_10_APP, ALPHA_11_APP}
-VERIFIED_DESKTOP_VERSIONS = {"0.164.0-alpha.11.1", "0.165.0-alpha.1.2", "0.166.0-alpha.5.1", "0.166.0-alpha.6", "0.167.0-alpha.3.2"}
+VERIFIED_DESKTOP_VERSIONS = {"0.164.0-alpha.11.1", "0.165.0-alpha.1.2", "0.166.0-alpha.5.1", "0.166.0-alpha.6", "0.167.0-alpha.3.2", "0.167.0-alpha.4.1"}
 VERIFIED_EXEC_VERSIONS = {"0.162.1", "0.163.0", "0.164.0", "0.165.0", "0.166.0"}
 VERIFIED_APP_EXEC_VERSIONS = {"0.164.0-alpha.11.1"}
 VERIFIED_DIRECT_CLI_CHILD_VERSIONS = {"0.165.0"}
-VERIFIED_DIRECT_APP_CHILD_VERSIONS = {"0.164.0-alpha.11.1", "0.166.0-alpha.5.1", "0.166.0-alpha.6", "0.167.0-alpha.3.2"}
+VERIFIED_DIRECT_APP_CHILD_VERSIONS = {"0.164.0-alpha.11.1", "0.166.0-alpha.5.1", "0.166.0-alpha.6", "0.167.0-alpha.3.2", "0.167.0-alpha.4.1"}
 CHILD_TERMINAL_EVENTS = {"SubagentStart", "SubagentStop"}
 
 
@@ -102,7 +102,7 @@ def _read_meta(store, path, source):
                 or spawn['depth'] != 1 or not isinstance(spawn.get('parent_thread_id'), str)
                 or not spawn['parent_thread_id']):
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
-        if version in {'0.166.0-alpha.6', '0.167.0-alpha.3.2'} and (
+        if version in {'0.166.0-alpha.6', '0.167.0-alpha.3.2', '0.167.0-alpha.4.1'} and (
                 meta.get('parent_thread_id') != spawn['parent_thread_id']
                 or meta.get('multi_agent_version') != 'v1'):
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
@@ -130,8 +130,10 @@ def _read_meta(store, path, source):
         if version in VERIFIED_DESKTOP_VERSIONS and (
                 source != 'codex-desktop' or not desktop or meta.get('source') != 'vscode'):
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
-        if version == '0.167.0-alpha.3.2' and (
+        if version in {'0.167.0-alpha.3.2', '0.167.0-alpha.4.1'} and (
                 meta.get('thread_source') not in ('user', 'automation') or meta.get('parent_thread_id') is not None):
+            raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
+        if version == '0.167.0-alpha.4.1' and meta.get('thread_source') != 'automation':
             raise ValueError('TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED')
         if version in VERIFIED_DESKTOP_VERSIONS and meta.get('session_id') != meta.get('id'):
             raise ValueError('TRANSCRIPT_SCHEMA_UNVERIFIED')
