@@ -191,7 +191,6 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
     index_db = Path(index_db)
     if index_db.is_symlink() or not index_db.is_file():
         raise ValueError('CODEX_INDEX_REQUIRED')
-    store.put('source_configuration',{'id':'transcript_index','index_parent':str(index_db.resolve().parent),'index_path':str(index_db.resolve())})
     with store.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         current = store.get('proactive_review_batches', 'active', db)
@@ -224,6 +223,11 @@ def plan(store, index_db, *, exclude_session=None, days=7, limit=12, stamp=None)
                     raise ValueError('CODEX_INDEX_SCHEMA_UNVERIFIED')
                 if index.execute("SELECT 1 FROM threads WHERE typeof(updated_at)!='integer' OR updated_at>32503680000 LIMIT 1").fetchone():
                     raise ValueError('CODEX_INDEX_TIME_UNVERIFIED')
+                # Pending work keeps its source configuration. A new index is
+                # adopted only with validated, successfully committed discovery.
+                store.put('source_configuration', {'id': 'transcript_index',
+                    'index_parent': str(index_db.resolve().parent),
+                    'index_path': str(index_db.resolve())}, db)
                 query = ('SELECT id,rollout_path,cwd,updated_at FROM threads WHERE (' + ' OR '.join(where)
                          + ') AND updated_at>=? AND (updated_at>? OR (updated_at=? AND id>?)) '
                          + 'AND id!=? ORDER BY updated_at,id LIMIT 201')

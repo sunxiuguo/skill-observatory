@@ -55,6 +55,53 @@ def test_pending_survives_restart_and_partial_receipt_never_discards_work(tmp_pa
     assert plan(s, index, stamp=STAMP+2)['status'] == 'no_change'
 
 
+@pytest.mark.parametrize('replacement', ['valid', 'wrong_schema', 'not_sqlite'])
+def test_pending_resume_preserves_source_index_configuration(tmp_path, replacement):
+    s, scope, index = setup(tmp_path); chat(scope, index, 'one')
+    batch = plan(s, index, stamp=STAMP)
+    original = s.get('source_configuration', 'transcript_index')
+    assert original == {'id': 'transcript_index', 'index_path': str(index.resolve()),
+                        'index_parent': str(index.resolve().parent)}
+    alternate = tmp_path / 'another' / 'index.sqlite'; alternate.parent.mkdir()
+    if replacement == 'not_sqlite':
+        alternate.write_bytes(b'not a Codex index')
+    else:
+        with sqlite3.connect(alternate) as db:
+            if replacement == 'valid':
+                db.execute('CREATE TABLE threads(id TEXT PRIMARY KEY,rollout_path TEXT,cwd TEXT,updated_at INTEGER)')
+    with s.connect() as db:
+        revision = db.execute('SELECT value FROM ledger_revision').fetchone()[0]
+    resumed = plan(Store(s.root), alternate, stamp=STAMP+1)
+    assert resumed['resumed'] and resumed['batch_id'] == batch['batch_id']
+    assert s.get('source_configuration', 'transcript_index') == original
+    assert s.get('proactive_review_batches', 'active') == batch
+    with s.connect() as db:
+        assert db.execute('SELECT value FROM ledger_revision').fetchone()[0] == revision
+
+
+@pytest.mark.parametrize('failure', ['schema', 'time', 'audit'])
+def test_failed_discovery_preserves_source_index_configuration(tmp_path, monkeypatch, failure):
+    s, scope, index = setup(tmp_path)
+    prior = {'id': 'transcript_index', 'index_path': str(tmp_path / 'trusted.sqlite'),
+             'index_parent': str(tmp_path)}
+    s.put('source_configuration', prior)
+    if failure == 'schema':
+        with sqlite3.connect(index) as db: db.execute('DROP TABLE threads')
+        error = 'CODEX_INDEX_SCHEMA_UNVERIFIED'
+    elif failure == 'time':
+        chat(scope, index, 'bad-time', updated=32503680001)
+        error = 'CODEX_INDEX_TIME_UNVERIFIED'
+    else:
+        def fail_audit(*args): raise ValueError('AUDIT_UNAVAILABLE')
+        monkeypatch.setattr('skill_observatory.proactive.audit', fail_audit)
+        error = 'AUDIT_UNAVAILABLE'
+    with pytest.raises(ValueError, match=error):
+        plan(s, index, stamp=STAMP)
+    assert s.get('source_configuration', 'transcript_index') == prior
+    assert s.get('proactive_review_batches', 'active') is None
+    assert s.get('proactive_review_state', 'scan') is None
+
+
 @pytest.mark.parametrize('unknown_child', [False, True])
 def test_pending_resume_excludes_current_root_and_descendants_without_consuming(tmp_path, monkeypatch, unknown_child):
     s, scope, index = setup(tmp_path)
