@@ -84,8 +84,10 @@ versions remain unverified and refused. The
 and the 0.166.0 CLI child shape are also unverified.
 The 0.167.0-alpha.3.2 gate admits its observed Desktop user and automation
 shapes and direct v1 children; its CLI shape remains unverified.
-The exact 0.167.0-alpha.4.1 gate admits its observed Desktop automation and
-direct v1 child shapes; user, CLI and nested child shapes remain unverified.
+The exact 0.167.0-alpha.4.1 gate admits its observed Desktop user, automation and
+direct v1 child shapes; CLI and nested child shapes remain unverified.
+The exact 0.169.0-alpha.11.1 gate admits its observed Desktop user and automation
+shapes; CLI and all child shapes remain unverified.
 Desktop-only shapes require matching rollout and logical session IDs. Unknown
 versions or incompatible source/schema combinations stay HOLD. It
 checks session/scope/cursor identity, and uses the same runtime/spool.

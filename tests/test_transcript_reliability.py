@@ -314,7 +314,8 @@ def assert_unobserved(store):
 
 @pytest.mark.parametrize(('child', 'surface'), [
     (False, 'user'), (False, 'automation'), (True, 'v1'), (True, 'current'),
-    (False, 'latest_automation'), (True, 'latest_child'),
+    (False, 'latest_user'), (False, 'latest_automation'), (True, 'latest_child'),
+    (False, 'alpha169_user'), (False, 'alpha169_automation'),
 ])
 @pytest.mark.parametrize('terminal', ['task_complete', 'turn_aborted'])
 def test_selected_shapes_bind_read_identity_and_repeat_at_eof(tmp_path, child, surface, terminal):
@@ -323,10 +324,13 @@ def test_selected_shapes_bind_read_identity_and_repeat_at_eof(tmp_path, child, s
         meta['thread_source'] = 'automation'
     elif surface == 'current':
         meta['cli_version'] = '0.167.0-alpha.3.2'
-    elif surface in ('latest_automation', 'latest_child'):
+    elif surface in ('latest_user', 'latest_automation', 'latest_child'):
         meta['cli_version'] = '0.167.0-alpha.4.1'
-        if not child:
+        if surface == 'latest_automation':
             meta['thread_source'] = 'automation'
+    elif surface in ('alpha169_user', 'alpha169_automation'):
+        meta['cli_version'] = '0.169.0-alpha.11.1'
+        meta['thread_source'] = 'user' if surface == 'alpha169_user' else 'automation'
     write_meta(path, meta)
     skill = tmp_path / 'project' / 'flow'
     skill.mkdir()
@@ -498,11 +502,37 @@ def test_current_child_requires_observed_multi_agent_version(tmp_path, multi_age
     assert_unobserved(store)
 
 
-def test_alpha4_unobserved_user_surface_stays_refused(tmp_path):
+@pytest.mark.parametrize('patch,source,reason', [
+    ({'originator': 'botmux-codex-app'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'thread_source': 'background'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'thread_source': None}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'parent_thread_id': 'foreign'}, 'codex-desktop', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'session_id': 'foreign'}, 'codex-desktop', 'TRANSCRIPT_SCHEMA_UNVERIFIED'),
+    ({'originator': 'codex_exec', 'source': 'exec'}, 'codex-cli', 'TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED'),
+    ({'cli_version': '0.167.0-alpha.4.2'}, 'codex-desktop', 'TRANSCRIPT_VERSION_UNVERIFIED'),
+    ({'cli_version': '0.169.0-alpha.11.2'}, 'codex-desktop', 'TRANSCRIPT_VERSION_UNVERIFIED'),
+    ({'cli_version': '0.169.0'}, 'codex-desktop', 'TRANSCRIPT_VERSION_UNVERIFIED'),
+])
+@pytest.mark.parametrize('version', ['0.167.0-alpha.4.1', '0.169.0-alpha.11.1'])
+def test_current_user_refuses_unverified_surfaces_and_identity(tmp_path, patch, source, reason, version):
+    store, path, meta, _ = selected_shape(tmp_path)
+    meta['cli_version'] = version
+    write_meta(path, {**meta, **patch})
+    with pytest.raises(ValueError, match='^' + reason + '$'):
+        observe_session(store, path, 'root', source)
+    assert_unobserved(store)
+
+
+@pytest.mark.parametrize('version', ['0.167.0-alpha.4.1', '0.169.0-alpha.11.1'])
+def test_current_user_refuses_foreign_session_and_scope(tmp_path, version):
     store, path, meta, source = selected_shape(tmp_path)
-    meta['cli_version'] = '0.167.0-alpha.4.1'
+    meta['cli_version'] = version
     write_meta(path, meta)
-    with pytest.raises(ValueError, match='^TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED$'):
+    with pytest.raises(ValueError, match='^SESSION_ID_MISMATCH$'):
+        observe_session(store, path, 'foreign', source)
+    assert_unobserved(store)
+    store.settings({'scopes': [str(tmp_path / 'project-neighbor')]})
+    with pytest.raises(ValueError, match='^OUTSIDE_SCOPE$'):
         observe_session(store, path, 'root', source)
     assert_unobserved(store)
 
@@ -558,3 +588,13 @@ def test_selected_shapes_keep_oversized_gap_and_recovery_boundary(tmp_path, chil
     assert store.list('transcript_gaps')[0]['reason_code'] == 'TRANSCRIPT_RECORD_TOO_LARGE'
     assert store.list('cursors')[0]['coverage_incomplete']
     assert observe_session(Store(store.root), path, meta['id'], source)['new_events'] == 0
+
+
+@pytest.mark.parametrize('source', ['codex-subagent', 'codex-desktop', 'codex-cli'])
+def test_alpha169_unobserved_child_surfaces_remain_refused(tmp_path, source):
+    store, path, meta, _ = selected_shape(tmp_path, True)
+    meta['cli_version'] = '0.169.0-alpha.11.1'
+    write_meta(path, meta)
+    with pytest.raises(ValueError, match='^TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED$'):
+        observe_session(store, path, 'child', source)
+    assert_unobserved(store)
