@@ -315,7 +315,7 @@ def assert_unobserved(store):
 @pytest.mark.parametrize(('child', 'surface'), [
     (False, 'user'), (False, 'automation'), (True, 'v1'), (True, 'current'),
     (False, 'latest_user'), (False, 'latest_automation'), (True, 'latest_child'),
-    (False, 'alpha169_user'), (False, 'alpha169_automation'),
+    (False, 'alpha169_user'), (False, 'alpha169_automation'), (True, 'alpha169_child'),
 ])
 @pytest.mark.parametrize('terminal', ['task_complete', 'turn_aborted'])
 def test_selected_shapes_bind_read_identity_and_repeat_at_eof(tmp_path, child, surface, terminal):
@@ -328,9 +328,10 @@ def test_selected_shapes_bind_read_identity_and_repeat_at_eof(tmp_path, child, s
         meta['cli_version'] = '0.167.0-alpha.4.1'
         if surface == 'latest_automation':
             meta['thread_source'] = 'automation'
-    elif surface in ('alpha169_user', 'alpha169_automation'):
+    elif surface in ('alpha169_user', 'alpha169_automation', 'alpha169_child'):
         meta['cli_version'] = '0.169.0-alpha.11.1'
-        meta['thread_source'] = 'user' if surface == 'alpha169_user' else 'automation'
+        if not child:
+            meta['thread_source'] = 'user' if surface == 'alpha169_user' else 'automation'
     write_meta(path, meta)
     skill = tmp_path / 'project' / 'flow'
     skill.mkdir()
@@ -447,7 +448,7 @@ def test_selected_child_refuses_logical_parent_and_surface_drift(tmp_path, patch
 
 
 @pytest.mark.parametrize('child', [False, True])
-@pytest.mark.parametrize('version', ['0.167.0-alpha.3.2', '0.167.0-alpha.4.1'])
+@pytest.mark.parametrize('version', ['0.167.0-alpha.3.2', '0.167.0-alpha.4.1', '0.169.0-alpha.11.1'])
 @pytest.mark.parametrize('patch', [
     {'cli_version': '0.167.0-alpha.3.3'},
     {'cli_version': '0.167.0-alpha.4.2'},
@@ -474,7 +475,7 @@ def test_current_automation_and_child_refuse_adjacent_contracts(tmp_path, child,
     assert_unobserved(store)
 
 
-@pytest.mark.parametrize('version', ['0.167.0-alpha.3.2', '0.167.0-alpha.4.1'])
+@pytest.mark.parametrize('version', ['0.167.0-alpha.3.2', '0.167.0-alpha.4.1', '0.169.0-alpha.11.1'])
 @pytest.mark.parametrize('patch', [
     {'depth': 2}, {'depth': True}, {'depth': '1'},
     {'parent_thread_id': 'foreign'}, {'parent_thread_id': None},
@@ -492,7 +493,7 @@ def test_current_child_refuses_spawn_drift(tmp_path, version, patch):
 
 
 @pytest.mark.parametrize('multi_agent_version', [None, 'v2'])
-@pytest.mark.parametrize('version', ['0.167.0-alpha.3.2', '0.167.0-alpha.4.1'])
+@pytest.mark.parametrize('version', ['0.167.0-alpha.3.2', '0.167.0-alpha.4.1', '0.169.0-alpha.11.1'])
 def test_current_child_requires_observed_multi_agent_version(tmp_path, multi_agent_version, version):
     store, path, meta, source = selected_shape(tmp_path, True)
     meta.update(cli_version=version, multi_agent_version=multi_agent_version)
@@ -590,11 +591,27 @@ def test_selected_shapes_keep_oversized_gap_and_recovery_boundary(tmp_path, chil
     assert observe_session(Store(store.root), path, meta['id'], source)['new_events'] == 0
 
 
-@pytest.mark.parametrize('source', ['codex-subagent', 'codex-desktop', 'codex-cli'])
-def test_alpha169_unobserved_child_surfaces_remain_refused(tmp_path, source):
+@pytest.mark.parametrize('source', ['codex-desktop', 'codex-cli'])
+def test_alpha169_child_refuses_other_surfaces(tmp_path, source):
     store, path, meta, _ = selected_shape(tmp_path, True)
     meta['cli_version'] = '0.169.0-alpha.11.1'
     write_meta(path, meta)
     with pytest.raises(ValueError, match='^TRANSCRIPT_SOURCE_SCHEMA_UNVERIFIED$'):
+        observe_session(store, path, 'child', source)
+    assert_unobserved(store)
+
+
+def test_alpha169_child_refuses_foreign_identity_and_scope(tmp_path):
+    store, path, meta, source = selected_shape(tmp_path, True)
+    meta['cli_version'] = '0.169.0-alpha.11.1'
+    write_meta(path, meta)
+    for expected in ({'expected_session_id': 'foreign'},
+                     {'expected_session_id': 'child', 'expected_agent_id': 'foreign'},
+                     {'expected_session_id': 'child', 'expected_root_session_id': 'foreign'}):
+        with pytest.raises(ValueError, match='^SESSION_ID_MISMATCH$'):
+            _identity(store, path, source, **expected)
+        assert_unobserved(store)
+    store.settings({'scopes': [str(tmp_path / 'project-neighbor')]})
+    with pytest.raises(ValueError, match='^OUTSIDE_SCOPE$'):
         observe_session(store, path, 'child', source)
     assert_unobserved(store)
